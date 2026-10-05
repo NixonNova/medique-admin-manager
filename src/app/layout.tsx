@@ -14,7 +14,7 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "Medique Admins Manager",
+  title: "Medique Admin Manager",
   description: "Admin manager for Medique",
 };
 

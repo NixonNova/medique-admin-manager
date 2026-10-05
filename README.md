@@ -1,4 +1,4 @@
-# Medique Admins Manager
+# Medique Admin Manager
 
 Next.js admin web app. Local development uses the Next.js dev server. Vercel can host it as-is. The Docker image is for moving to another host later.
 
@@ -9,7 +9,11 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Copy `.env.example` to `.env.local` and set `BETTER_AUTH_SECRET` and `ADMIN_INITIAL_PASSWORD`. The first start creates the admin account `nixonnova@outlook.com` when that password is set and the account does not exist yet.
+
+Open [http://localhost:3000](http://localhost:3000). Unauthenticated visits go to the sign-in page.
+
+Accounts are stored in a local SQLite file at `data/auth.sqlite`. That file works for local development and for the Docker volume. Vercel’s filesystem does not keep a SQLite file, so move the database to a hosted Postgres or MySQL database before deploying there.
 
 ## Production on Vercel
 
