@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
@@ -9,6 +6,7 @@ import { admin } from "better-auth/plugins";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { canAssignRole, isMediqueAdminEmail, isRole, primaryRole, type Role } from "@/lib/roles";
 import { getPendingUserOwnership } from "@/lib/create-user-context";
+import { getSqliteDatabase } from "@/lib/sqlite";
 import { ownershipForNewUser } from "@/lib/tenancy";
 
 const ac = createAccessControl(defaultStatements);
@@ -40,17 +38,8 @@ const roles = {
   user: userRole,
 } satisfies Record<Role, unknown>;
 
-const dataDirectory = path.join(process.cwd(), "data");
-fs.mkdirSync(dataDirectory, { recursive: true });
-
-const database = new DatabaseSync(
-  process.env.AUTH_DATABASE_PATH ?? path.join(dataDirectory, "auth.sqlite"),
-);
-database.exec("PRAGMA journal_mode = WAL;");
-database.exec("PRAGMA foreign_keys = ON;");
-
 export const auth = betterAuth({
-  database,
+  database: getSqliteDatabase(),
   user: {
     additionalFields: {
       adminId: {

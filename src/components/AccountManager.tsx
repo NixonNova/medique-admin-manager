@@ -50,6 +50,7 @@ type AccountManagerProps = {
   users: UserForTree[];
   actorRole: Role | null;
   actorId: string;
+  initialLastGenerationDate: string | null;
 };
 
 type TreeUiContextValue = {
@@ -58,7 +59,7 @@ type TreeUiContextValue = {
 };
 
 const TreeUiContext = createContext<TreeUiContextValue>({
-  openCreateUnder: () => {},
+  openCreateUnder: () => { },
   canCreateOnNode: () => false,
 });
 
@@ -157,7 +158,12 @@ function AddTreeItem(props: TreeItemProps) {
   );
 }
 
-export default function AccountManager({ users, actorRole, actorId }: AccountManagerProps) {
+export default function AccountManager({
+  users,
+  actorRole,
+  actorId,
+  initialLastGenerationDate,
+}: AccountManagerProps) {
   const router = useRouter();
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const [createUnderUserId, setCreateUnderUserId] = useState<string | null>(null);
@@ -321,17 +327,22 @@ export default function AccountManager({ users, actorRole, actorId }: AccountMan
                     onChange={(_event, newValue: number) => setUserInfoTab(newValue)}
                     aria-label="User info sections"
                   >
-                    <Tab label="Users" {...userInfoTabA11yProps(0)} />
-                    <Tab label="Working Days Generation" {...userInfoTabA11yProps(1)} />
+{/*                     <Tab label="Users" {...userInfoTabA11yProps(0)} />
+ */}
+                    <Tab label="Working Days Generator" {...userInfoTabA11yProps(0)} />
                   </Tabs>
                 </Box>
-                <UserInfoTabPanel value={userInfoTab} index={0}>
+{/*                 <UserInfoTabPanel value={userInfoTab} index={1}>
                   <Typography variant="body1" color="text.secondary">
                     Users tab placeholder — manage accounts and permissions here.
                   </Typography>
                 </UserInfoTabPanel>
-                <UserInfoTabPanel value={userInfoTab} index={1}>
-                  <WorkingDaysGenerationForm accountKey={selectedUser.id} />
+ */}
+                <UserInfoTabPanel value={userInfoTab} index={0}>
+                  <WorkingDaysGenerationForm
+                    accountKey={selectedUser.id}
+                    initialLastGenerationDate={initialLastGenerationDate}
+                  />
                 </UserInfoTabPanel>
               </>
             ) : null}
