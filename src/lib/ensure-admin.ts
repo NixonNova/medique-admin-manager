@@ -1,13 +1,10 @@
 import { auth } from "@/lib/auth";
+import { ensureClinics } from "@/lib/clinics";
+import { ensureUserTypes } from "@/lib/user-types";
 
 const MEDIQUE_ADMIN_ROLE = "medique admin";
 
 const mediqueAdmins = [
-  {
-    email: "nixonnova@outlook.com",
-    name: "Nixon Nova",
-    password: process.env.ADMIN_INITIAL_PASSWORD,
-  },
   {
     email: "admin@medique.com",
     name: "Medique Admin",
@@ -18,6 +15,8 @@ const mediqueAdmins = [
 export async function ensureAdmin() {
   const context = await auth.$context;
   await context.runMigrations();
+  await ensureUserTypes();
+  await ensureClinics();
 
   const tenantAdmins = await context.adapter.findMany<{ id: string; role?: string | null; adminId?: string | null }>({
     model: "user",

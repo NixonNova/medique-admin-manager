@@ -16,6 +16,9 @@ export type UserForTree = {
   adminId?: string | null;
   clinicId?: string | null;
   parentUserId?: string | null;
+  /** Comma-separated usertype names. Empty when the user has none. */
+  userTypeLabel?: string;
+  userTypeIds?: number[];
 };
 
 export type ActorForOwnership = {

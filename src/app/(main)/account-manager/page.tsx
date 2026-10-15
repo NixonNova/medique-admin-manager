@@ -3,8 +3,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import AccountManager from "@/components/AccountManager";
 import { auth } from "@/lib/auth";
+import { listClinics } from "@/lib/clinics";
 import { primaryRole } from "@/lib/roles";
 import { filterUsersForTreeView } from "@/lib/user-tree";
+import { listUserTypes } from "@/lib/user-types";
 import { listUsersForTree } from "@/lib/users";
 import { getLastWorkingDayDate } from "@/lib/working-days-store";
 
@@ -22,15 +24,22 @@ export default async function AccountManagerPage() {
   }
 
   const actorId = session?.user.id ?? "";
-  const users = filterUsersForTreeView(listUsersForTree(), actorId, actorRole);
+  const [users, userTypes, clinics, initialLastGenerationDate] = await Promise.all([
+    listUsersForTree().then((rows) => filterUsersForTreeView(rows, actorId, actorRole)),
+    listUserTypes(),
+    listClinics(),
+    getLastWorkingDayDate(),
+  ]);
 
   return (
     <main className="flex flex-1 px-6 py-6">
       <AccountManager
         users={users}
+        userTypes={userTypes}
+        clinics={clinics}
         actorRole={actorRole}
         actorId={actorId}
-        initialLastGenerationDate={getLastWorkingDayDate()}
+        initialLastGenerationDate={initialLastGenerationDate}
       />
     </main>
   );

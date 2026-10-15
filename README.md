@@ -9,11 +9,11 @@ npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env.local` and set `BETTER_AUTH_SECRET` and `ADMIN_INITIAL_PASSWORD`. The first start creates the admin account `nixonnova@outlook.com` when that password is set and the account does not exist yet.
+Copy `.env.example` to `.env.local` and set `BETTER_AUTH_SECRET` and `DATABASE_URL`. The first start creates the platform admin `admin@medique.com` if that account does not exist yet.
 
 Open [http://localhost:3000](http://localhost:3000). Unauthenticated visits go to the sign-in page.
 
-Accounts are stored in a local SQLite file at `data/auth.sqlite`. That file works for local development and for the Docker volume. Vercel’s filesystem does not keep a SQLite file, so move the database to a hosted Postgres or MySQL database before deploying there.
+The app reads and writes Neon Postgres (database name **medique-db**). `DATABASE_URL` is required.
 
 ## Production on Vercel
 

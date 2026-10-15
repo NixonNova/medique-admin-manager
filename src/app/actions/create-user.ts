@@ -14,6 +14,11 @@ import {
 } from "@/lib/roles";
 import { ownershipForNewUserUnderParent } from "@/lib/tenancy";
 import { canCreateUnderTreeNode } from "@/lib/user-tree";
+import {
+  normalizeUserTypeIds,
+  saveUserTypeAssignments,
+  userTypeSelectionError,
+} from "@/lib/user-types";
 
 export type CreateUserInput = {
   name: string;
@@ -21,6 +26,7 @@ export type CreateUserInput = {
   password: string;
   role: string;
   parentUserId?: string | null;
+  userTypeIds?: number[];
 };
 
 export type CreateUserResult = { ok: true } | { ok: false; error: string };
@@ -122,6 +128,16 @@ export async function createManagedUser(input: CreateUserInput): Promise<CreateU
     return failure("Generate a password before saving.");
   }
 
+  const userTypeIds = normalizeUserTypeIds(input.userTypeIds);
+  if (!userTypeIds) {
+    return failure("Select a valid user type.");
+  }
+
+  const userTypeError = await userTypeSelectionError(userTypeIds);
+  if (userTypeError) {
+    return failure(userTypeError);
+  }
+
   const existing = await context.adapter.findOne<{ id: string }>({
     model: "user",
     where: [{ field: "email", value: email }],
@@ -155,17 +171,20 @@ export async function createManagedUser(input: CreateUserInput): Promise<CreateU
     });
 
     const createdUserId = created.user?.id;
-    if (createdUserId) {
-      await context.adapter.update({
-        model: "user",
-        where: [{ field: "id", value: createdUserId }],
-        update: {
-          adminId: ownership.adminId,
-          clinicId: ownership.clinicId,
-          parentUserId: ownership.parentUserId ?? null,
-        },
-      });
+    if (!createdUserId) {
+      return failure("Could not create user.");
     }
+
+    await context.adapter.update({
+      model: "user",
+      where: [{ field: "id", value: createdUserId }],
+      update: {
+        adminId: ownership.adminId,
+        clinicId: ownership.clinicId,
+        parentUserId: ownership.parentUserId ?? null,
+      },
+    });
+    await saveUserTypeAssignments(createdUserId, userTypeIds);
   } catch (error) {
     const message = readErrorMessage(error);
     if (message.toLowerCase().includes("already exists")) {

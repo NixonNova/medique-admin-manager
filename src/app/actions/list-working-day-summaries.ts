@@ -35,6 +35,6 @@ export async function fetchWorkingDaySummaries(
     return failure("Start date must be on or before the end date.");
   }
 
-  const data = listWorkingDaySlotSummaries(dateStart, dateEnd);
+  const data = await listWorkingDaySlotSummaries(dateStart, dateEnd);
   return { ok: true, data };
 }

@@ -46,7 +46,7 @@ export async function generateWorkingDays(
   }
 
   try {
-    const saved = saveGeneratedWorkingDays(values);
+    const saved = await saveGeneratedWorkingDays(values);
     revalidatePath("/account-manager");
     return { ok: true, lastGenerationDate: saved.lastGenerationDate };
   } catch (error) {

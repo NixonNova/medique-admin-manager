@@ -1,28 +1,48 @@
-import fs from "node:fs";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-
+import { getAppDatabase } from "@/lib/app-database";
 import type { UserForTree } from "@/lib/tenancy";
+import { ensureUserTypes } from "@/lib/user-types";
 
 export type AuthUserEmail = Pick<UserForTree, "id" | "email">;
 
-export function listUsersForTree(): UserForTree[] {
-  const dbPath =
-    process.env.AUTH_DATABASE_PATH ?? path.join(process.cwd(), "data", "auth.sqlite");
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: string | null;
+  adminId: string | null;
+  clinicId: string | null;
+  parentUserId: string | null;
+  userTypeLabel: string | null;
+  userTypeIds: string | null;
+};
 
-  if (!fs.existsSync(dbPath)) {
-    return [];
-  }
+export async function listUsersForTree(): Promise<UserForTree[]> {
+  await ensureUserTypes();
+  const db = await getAppDatabase();
+  const rows = await db.all<UserRow>(`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u."adminId",
+      u."clinicId",
+      u."parentUserId",
+      types.names AS "userTypeLabel",
+      types.ids AS "userTypeIds"
+    FROM "user" u
+    LEFT JOIN (
+      SELECT
+        link."UserID",
+        string_agg(t."Name", ', ' ORDER BY t."ID") AS names,
+        string_agg(t."ID"::text, ',' ORDER BY t."ID") AS ids
+      FROM "userusertype" link
+      INNER JOIN "usertype" t ON t."ID" = link."UserTypeID"
+      GROUP BY link."UserID"
+    ) types ON types."UserID" = u.id
+    ORDER BY u.email ASC
+  `);
 
-  const database = new DatabaseSync(dbPath, { readOnly: true });
-  type Row = UserForTree;
-  const rows = database
-    .prepare(
-      "SELECT id, name, email, role, adminId, clinicId, parentUserId FROM user ORDER BY email ASC",
-    )
-    .all() as Row[];
-  // node:sqlite returns null-prototype row objects, which React's RSC
-  // serializer rejects; map to plain objects before crossing the boundary.
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -31,10 +51,15 @@ export function listUsersForTree(): UserForTree[] {
     adminId: row.adminId ?? null,
     clinicId: row.clinicId ?? null,
     parentUserId: row.parentUserId ?? null,
+    userTypeLabel: row.userTypeLabel ?? "",
+    userTypeIds: (row.userTypeIds ?? "")
+      .split(",")
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0),
   }));
 }
 
 /** @deprecated Use listUsersForTree */
-export function listUserEmails(): AuthUserEmail[] {
+export async function listUserEmails(): Promise<AuthUserEmail[]> {
   return listUsersForTree();
 }

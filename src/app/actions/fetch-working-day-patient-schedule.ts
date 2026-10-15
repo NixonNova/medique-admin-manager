@@ -27,5 +27,5 @@ export async function fetchWorkingDayPatientSchedule(
     return { ok: false, error: "Date must use YYYY-MM-DD format." };
   }
 
-  return { ok: true, data: getWorkingDayPatientSchedule(date) };
+  return { ok: true, data: await getWorkingDayPatientSchedule(date) };
 }

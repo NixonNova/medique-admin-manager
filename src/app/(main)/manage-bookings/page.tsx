@@ -8,14 +8,14 @@ export const metadata: Metadata = {
   title: "Manage Bookings · Medique Admin Manager",
 };
 
-export default function ManageBookingsPage() {
+export default async function ManageBookingsPage() {
   const todayDate = startOfToday();
   const today = formatIsoDate(todayDate);
   const weekStart = formatIsoDate(addCalendarDays(todayDate, -7));
   const monthStart = formatIsoDate(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
   const monthEnd = formatIsoDate(new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0));
-  const workingDaySummaries = listWorkingDaySlotSummaries(monthStart, monthEnd);
-  const { rows, totalCount, pageSize } = listBookings({
+  const workingDaySummaries = await listWorkingDaySlotSummaries(monthStart, monthEnd);
+  const { rows, totalCount, pageSize } = await listBookings({
     bookingStart: weekStart,
     bookingEnd: today,
   });

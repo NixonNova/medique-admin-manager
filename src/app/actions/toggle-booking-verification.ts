@@ -31,7 +31,7 @@ export async function toggleBookingVerification(
   }
 
   try {
-    const row = setBookingVerified(id, verified, verified ? session.user.id : null);
+    const row = await setBookingVerified(id, verified, verified ? session.user.id : null);
     if (!row) {
       return failure("Booking not found.");
     }

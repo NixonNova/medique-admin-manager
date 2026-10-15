@@ -5,8 +5,3 @@ services:
       - "3000:3000"
     env_file:
       - .env.local
-    volumes:
-      - auth-data:/app/data
-
-volumes:
-  auth-data:

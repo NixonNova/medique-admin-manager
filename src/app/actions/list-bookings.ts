@@ -33,7 +33,7 @@ export async function fetchBookings(query: ListBookingsQuery = {}): Promise<Fetc
     return failure("Booking start date must be on or before the end date.");
   }
 
-  const data = listBookings({
+  const data = await listBookings({
     pageSize: DEFAULT_BOOKINGS_PAGE_SIZE,
     ...query,
   });

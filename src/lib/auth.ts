@@ -6,7 +6,7 @@ import { admin } from "better-auth/plugins";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { canAssignRole, isMediqueAdminEmail, isRole, primaryRole, type Role } from "@/lib/roles";
 import { getPendingUserOwnership } from "@/lib/create-user-context";
-import { getSqliteDatabase } from "@/lib/sqlite";
+import { getAuthDatabase } from "@/lib/auth-database";
 import { ownershipForNewUser } from "@/lib/tenancy";
 
 const ac = createAccessControl(defaultStatements);
@@ -39,7 +39,7 @@ const roles = {
 } satisfies Record<Role, unknown>;
 
 export const auth = betterAuth({
-  database: getSqliteDatabase(),
+  database: getAuthDatabase(),
   user: {
     additionalFields: {
       adminId: {
