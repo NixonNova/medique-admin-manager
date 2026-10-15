@@ -2,6 +2,14 @@
 
 Next.js admin web app. Local development uses the Next.js dev server. Vercel can host it as-is. The Docker image is for moving to another host later.
 
+## Tech stack
+
+- **App:** Next.js 16 (App Router), React 19, TypeScript
+- **UI:** Material UI 9 (Emotion), MUI X Tree View and Scheduler, Tailwind CSS 4
+- **Auth:** Better Auth
+- **Data:** Neon Postgres, accessed with `pg` and Kysely
+- **Tooling:** ESLint, Docker (standalone Next.js output)
+
 ## Run locally
 
 ```bash
