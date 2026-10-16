@@ -20,7 +20,7 @@ import Typography from "@mui/material/Typography";
 import { fetchBookings } from "@/app/actions/list-bookings";
 import { toggleBookingVerification } from "@/app/actions/toggle-booking-verification";
 import type { BookingTableRow } from "@/lib/bookings-types";
-import type { WorkingDaySlotSummary } from "@/lib/working-days-store";
+import type { Clinic } from "@/lib/clinics";
 import WorkingDaysCalendar from "@/components/WorkingDaysCalendar";
 
 type ManageBookingsTableProps = {
@@ -29,7 +29,7 @@ type ManageBookingsTableProps = {
   pageSize: number;
   defaultBookingStart: string;
   defaultBookingEnd: string;
-  initialWorkingDaySummaries: WorkingDaySlotSummary[];
+  clinics: Clinic[];
   workingDaysVisibleDate: string;
 };
 
@@ -98,7 +98,7 @@ export default function ManageBookingsTable({
   pageSize,
   defaultBookingStart,
   defaultBookingEnd,
-  initialWorkingDaySummaries,
+  clinics,
   workingDaysVisibleDate,
 }: ManageBookingsTableProps) {
   const [rows, setRows] = useState(initialRows);
@@ -306,10 +306,7 @@ export default function ManageBookingsTable({
       </ManageBookingsTabPanel>
 
       <ManageBookingsTabPanel value={activeTab} index={1}>
-        <WorkingDaysCalendar
-          initialSummaries={initialWorkingDaySummaries}
-          initialVisibleDate={workingDaysVisibleDate}
-        />
+        <WorkingDaysCalendar clinics={clinics} initialVisibleDate={workingDaysVisibleDate} />
       </ManageBookingsTabPanel>
     </Stack>
   );

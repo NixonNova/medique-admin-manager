@@ -8,7 +8,6 @@ import { primaryRole } from "@/lib/roles";
 import { filterUsersForTreeView } from "@/lib/user-tree";
 import { listUserTypes } from "@/lib/user-types";
 import { listUsersForTree } from "@/lib/users";
-import { getLastWorkingDayDate } from "@/lib/working-days-store";
 
 export const metadata: Metadata = {
   title: "Account Manager · Medique Admin Manager",
@@ -24,11 +23,10 @@ export default async function AccountManagerPage() {
   }
 
   const actorId = session?.user.id ?? "";
-  const [users, userTypes, clinics, initialLastGenerationDate] = await Promise.all([
+  const [users, userTypes, clinics] = await Promise.all([
     listUsersForTree().then((rows) => filterUsersForTreeView(rows, actorId, actorRole)),
     listUserTypes(),
     listClinics(),
-    getLastWorkingDayDate(),
   ]);
 
   return (
@@ -39,7 +37,6 @@ export default async function AccountManagerPage() {
         clinics={clinics}
         actorRole={actorRole}
         actorId={actorId}
-        initialLastGenerationDate={initialLastGenerationDate}
       />
     </main>
   );

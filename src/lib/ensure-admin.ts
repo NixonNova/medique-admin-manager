@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { ensureClinics } from "@/lib/clinics";
 import { ensureUserTypes } from "@/lib/user-types";
+import { ensureWorkingDayReferences } from "@/lib/working-days-store";
 
 const MEDIQUE_ADMIN_ROLE = "medique admin";
 
@@ -17,6 +18,7 @@ export async function ensureAdmin() {
   await context.runMigrations();
   await ensureUserTypes();
   await ensureClinics();
+  await ensureWorkingDayReferences();
 
   const tenantAdmins = await context.adapter.findMany<{ id: string; role?: string | null; adminId?: string | null }>({
     model: "user",

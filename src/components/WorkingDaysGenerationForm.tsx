@@ -17,19 +17,26 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { generateWorkingDays } from "@/app/actions/generate-working-days";
+import {
+  checkWorkingDayTimeSlots,
+  generateWorkingDays,
+} from "@/app/actions/generate-working-days";
+import type { Clinic } from "@/lib/clinics";
 import {
   computeDailyTimetable,
+  earliestGenerationDate,
   enumerateGenerationDates,
   type DailyTimetable,
-  parseIsoDate,
+  formatIsoDate,
+  parseCalendarDate,
   parseTimeToMinutes,
   formatMinutesAsTime,
-  startOfToday,
+  isAllowedGenerationStart,
   validateWorkingDaysForm,
   WORKING_WEEKDAYS,
   type WorkingWeekdayKey,
@@ -38,23 +45,26 @@ import {
 
 export type { WorkingDaysGenerationValues };
 
-const DEFAULT_VALUES: WorkingDaysGenerationValues = {
-  monday: true,
-  tuesday: true,
-  wednesday: true,
-  thursday: true,
-  friday: true,
-  saturday: false,
-  sunday: false,
-  workingStartTime: "10:00",
-  addBreakTime: false,
-  breakStartTime: "14:00",
-  breakLengthMinutes: 60,
-  sessionsPerDay: 16,
-  sessionLengthMinutes: 60,
-  concurrentPatients: 2,
-  daysToGenerate: 30,
-};
+function createDefaultValues(): WorkingDaysGenerationValues {
+  return {
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+    sunday: false,
+    workingStartTime: "10:00",
+    addBreakTime: false,
+    breakStartTime: "14:00",
+    breakLengthMinutes: 60,
+    sessionsPerDay: 16,
+    sessionLengthMinutes: 60,
+    concurrentPatients: 2,
+    daysToGenerate: 10,
+    generationStartDate: formatIsoDate(earliestGenerationDate()),
+  };
+}
 
 function formatDisplayDate(date: Date): string {
   return date.toLocaleDateString("en-GB", {
@@ -62,26 +72,6 @@ function formatDisplayDate(date: Date): string {
     month: "long",
     year: "numeric",
   });
-}
-
-function calendarDaysFromToday(date: Date): number {
-  const today = startOfToday();
-  const target = new Date(date);
-  target.setHours(0, 0, 0, 0);
-  const msPerDay = 24 * 60 * 60 * 1000;
-  return Math.round((target.getTime() - today.getTime()) / msPerDay);
-}
-
-function formatDaysFromToday(date: Date): string {
-  const days = calendarDaysFromToday(date);
-  if (days === 0) {
-    return "(today)";
-  }
-  if (days < 0) {
-    const count = Math.abs(days);
-    return count === 1 ? "(1 day ago)" : `(${count} days ago)`;
-  }
-  return days === 1 ? "(next 1 day)" : `(next ${days} days)`;
 }
 
 function formatGenerationCriteria(options: {
@@ -162,29 +152,32 @@ function concurrentPatientsCapacityHelper(
 type WorkingDaysGenerationFormProps = {
   /** Reset defaults when the selected account changes. */
   accountKey: string;
-  /** Latest WorkingDayHeader date (YYYY-MM-DD), or null when none exist. */
-  initialLastGenerationDate: string | null;
+  /** User stored on each generated WorkingDayDetail row. */
+  userId: string;
+  clinics: Clinic[];
 };
 
 export default function WorkingDaysGenerationForm({
   accountKey,
-  initialLastGenerationDate,
+  userId,
+  clinics,
 }: WorkingDaysGenerationFormProps) {
-  const [values, setValues] = useState(DEFAULT_VALUES);
+  const [values, setValues] = useState(createDefaultValues);
+  const [clinicId, setClinicId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [checkNotice, setCheckNotice] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [lastGenerationDate, setLastGenerationDate] = useState(initialLastGenerationDate);
+  const [pendingAction, setPendingAction] = useState<"check" | "generate" | null>(null);
+  const pending = pendingAction !== null;
+  const earliestStartDate = formatIsoDate(earliestGenerationDate());
 
   useEffect(() => {
-    setValues(DEFAULT_VALUES);
+    setValues(createDefaultValues());
+    setClinicId("");
     setError(null);
+    setCheckNotice(null);
     setSuccessOpen(false);
   }, [accountKey]);
-
-  useEffect(() => {
-    setLastGenerationDate(initialLastGenerationDate);
-  }, [initialLastGenerationDate]);
 
   const concurrentPatientsHelper = useMemo(
     () =>
@@ -192,24 +185,19 @@ export default function WorkingDaysGenerationForm({
     [values.concurrentPatients, values.sessionsPerDay],
   );
 
-  const lastGenerationDay = useMemo(
-    () => (lastGenerationDate ? parseIsoDate(lastGenerationDate) : null),
-    [lastGenerationDate],
-  );
-
-  /** Anchor for the next batch preview (matches server when no headers exist yet). */
-  const generationAnchorDay = useMemo(
-    () => lastGenerationDay ?? startOfToday(),
-    [lastGenerationDay],
-  );
+  const generationAnchorDay = useMemo(() => {
+    const start = parseCalendarDate(values.generationStartDate);
+    if (!start || !isAllowedGenerationStart(start)) {
+      return null;
+    }
+    return start;
+  }, [values.generationStartDate]);
 
   const previewGenerationDates = useMemo(
     () =>
-      enumerateGenerationDates(
-        generationAnchorDay,
-        values.daysToGenerate,
-        values,
-      ),
+      generationAnchorDay
+        ? enumerateGenerationDates(generationAnchorDay, values.daysToGenerate, values)
+        : [],
     [generationAnchorDay, values],
   );
 
@@ -247,33 +235,84 @@ export default function WorkingDaysGenerationForm({
     patch(key, checked);
   }
 
+  function readGenerationInput():
+    | { clinicId: number }
+    | { error: string } {
+    const selectedClinicId = Number(clinicId);
+    if (!Number.isInteger(selectedClinicId) || selectedClinicId < 1) {
+      return { error: "Select a clinic." };
+    }
+    const validationError = validateWorkingDaysForm(values);
+    if (validationError) {
+      return { error: validationError };
+    }
+    return { clinicId: selectedClinicId };
+  }
+
+  async function onCheckTimeSlots() {
+    if (pending) {
+      return;
+    }
+    setError(null);
+    setCheckNotice(null);
+    setSuccessOpen(false);
+
+    const input = readGenerationInput();
+    if ("error" in input) {
+      setError(input.error);
+      return;
+    }
+
+    setPendingAction("check");
+    try {
+      const result = await checkWorkingDayTimeSlots({
+        values,
+        clinicId: input.clinicId,
+        userId,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setCheckNotice("Time slots are available.");
+    } catch {
+      setError("Could not check time slots.");
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) {
       return;
     }
     setError(null);
+    setCheckNotice(null);
     setSuccessOpen(false);
 
-    const validationError = validateWorkingDaysForm(values);
-    if (validationError) {
-      setError(validationError);
+    const input = readGenerationInput();
+    if ("error" in input) {
+      setError(input.error);
       return;
     }
 
-    setPending(true);
+    setPendingAction("generate");
     try {
-      const result = await generateWorkingDays(values);
+      const result = await generateWorkingDays({
+        values,
+        clinicId: input.clinicId,
+        userId,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      setLastGenerationDate(result.lastGenerationDate);
       setSuccessOpen(true);
     } catch {
       setError("Could not generate working days.");
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   }
 
@@ -288,6 +327,7 @@ export default function WorkingDaysGenerationForm({
     <form onSubmit={onSubmit} noValidate>
       <Stack spacing={2.5} sx={{ width: "100%" }}>
         {error ? <Alert severity="error">{error}</Alert> : null}
+        {checkNotice ? <Alert severity="success">{checkNotice}</Alert> : null}
 
         <Accordion disableGutters sx={{ width: "100%" }}>
           <AccordionSummary
@@ -448,6 +488,22 @@ export default function WorkingDaysGenerationForm({
           <AccordionDetails>
             <Stack spacing={2.5}>
               <TextField
+                label="Start of generation"
+                name="generationStartDate"
+                type="date"
+                value={values.generationStartDate}
+                onChange={(event) => patch("generationStartDate", event.target.value)}
+                required
+                fullWidth
+                disabled={pending}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { min: earliestStartDate },
+                }}
+                helperText="Working days are generated from this date forward. Today and earlier dates are not available."
+              />
+
+              <TextField
                 label="How many working days to generate"
                 name="daysToGenerate"
                 type="number"
@@ -459,19 +515,49 @@ export default function WorkingDaysGenerationForm({
                 slotProps={{ htmlInput: { min: 1, step: 1 } }}
               />
 
-              <div>
-                <Typography variant="body2" color="text.secondary" component="div" gutterBottom>
-                  Last generated working day
-                </Typography>
-                <Typography variant="body1" color={lastGenerationDay ? undefined : "text.secondary"}>
-                  {lastGenerationDay
-                    ? `${formatDisplayDate(lastGenerationDay)} ${formatDaysFromToday(lastGenerationDay)}`
-                    : "None yet — no working days have been generated."}
-                </Typography>
-              </div>
-              <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", alignSelf: "flex-start" }}>
-                <Button type="submit" variant="contained" disabled={pending} aria-busy={pending}>
-                  {pending ? "Generating…" : "Generate"}
+              <TextField
+                select
+                label="Clinic"
+                name="clinicId"
+                value={clinicId}
+                onChange={(event) => setClinicId(event.target.value)}
+                required
+                fullWidth
+                disabled={pending || clinics.length === 0}
+                helperText={
+                  clinics.length === 0 ? "Add a clinic before generating working days." : undefined
+                }
+              >
+                {clinics.length === 0 ? (
+                  <MenuItem value="" disabled>
+                    No clinics
+                  </MenuItem>
+                ) : (
+                  clinics.map((clinic) => (
+                    <MenuItem key={clinic.id} value={String(clinic.id)}>
+                      {clinic.name}
+                    </MenuItem>
+                  ))
+                )}
+              </TextField>
+
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", alignSelf: "flex-start" }}>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  onClick={onCheckTimeSlots}
+                  disabled={pending || !clinicId}
+                  aria-busy={pendingAction === "check"}
+                >
+                  {pendingAction === "check" ? "Validating…" : "Validate Time Slot"}
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={pending || !clinicId}
+                  aria-busy={pendingAction === "generate"}
+                >
+                  {pendingAction === "generate" ? "Generating…" : "Generate"}
                 </Button>
                 <Tooltip
                   describeChild

@@ -18,9 +18,6 @@ function selectedItemId(pathname: string) {
   if (pathname.startsWith("/manage-bookings")) {
     return "manage-bookings";
   }
-  if (pathname.startsWith("/reset-password")) {
-    return "reset-password";
-  }
   return null;
 }
 
@@ -46,10 +43,6 @@ export default function AppMenu({ viewerRole }: AppMenuProps) {
     if (itemId === "manage-bookings") {
       router.push("/manage-bookings");
     }
-
-    if (itemId === "reset-password") {
-      router.push("/reset-password");
-    }
   }
 
   const isUser = viewerRole === "user";
@@ -58,14 +51,10 @@ export default function AppMenu({ viewerRole }: AppMenuProps) {
     <SimpleTreeView
       aria-label="Main menu"
       selectedItems={selectedItemId(pathname)}
-      defaultExpandedItems={["configurations"]}
       onItemClick={handleItemClick}
     >
-      <TreeItem itemId="configurations" label="Configurations">
-        {!isUser ? <TreeItem itemId="account-manager" label="Account Manager" /> : null}
-        <TreeItem itemId="manage-bookings" label="Manage Bookings" />
-      </TreeItem>
-      <TreeItem itemId="reset-password" label="Reset Password" />
+      {!isUser ? <TreeItem itemId="account-manager" label="Account Manager" /> : null}
+      <TreeItem itemId="manage-bookings" label="Manage Bookings" />
       <TreeItem itemId="logout" label={signingOut ? "Signing out..." : "Logout"} />
     </SimpleTreeView>
   );

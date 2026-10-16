@@ -15,6 +15,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function fetchWorkingDayPatientSchedule(
   date: string,
+  clinicId: number,
 ): Promise<FetchWorkingDayPatientScheduleResult> {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -26,6 +27,9 @@ export async function fetchWorkingDayPatientSchedule(
   if (!ISO_DATE.test(date)) {
     return { ok: false, error: "Date must use YYYY-MM-DD format." };
   }
+  if (!Number.isInteger(clinicId) || clinicId < 1) {
+    return { ok: false, error: "Select a clinic." };
+  }
 
-  return { ok: true, data: await getWorkingDayPatientSchedule(date) };
+  return { ok: true, data: await getWorkingDayPatientSchedule(date, clinicId) };
 }

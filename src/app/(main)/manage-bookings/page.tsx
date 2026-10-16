@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import ManageBookingsTable from "@/components/ManageBookingsTable";
 import { listBookings } from "@/lib/bookings-store";
+import { listClinics } from "@/lib/clinics";
 import { addCalendarDays, formatIsoDate, startOfToday } from "@/lib/working-day-schedule";
-import { listWorkingDaySlotSummaries } from "@/lib/working-days-store";
 
 export const metadata: Metadata = {
   title: "Manage Bookings · Medique Admin Manager",
@@ -12,9 +12,7 @@ export default async function ManageBookingsPage() {
   const todayDate = startOfToday();
   const today = formatIsoDate(todayDate);
   const weekStart = formatIsoDate(addCalendarDays(todayDate, -7));
-  const monthStart = formatIsoDate(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
-  const monthEnd = formatIsoDate(new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0));
-  const workingDaySummaries = await listWorkingDaySlotSummaries(monthStart, monthEnd);
+  const clinics = await listClinics();
   const { rows, totalCount, pageSize } = await listBookings({
     bookingStart: weekStart,
     bookingEnd: today,
@@ -29,7 +27,7 @@ export default async function ManageBookingsPage() {
           pageSize={pageSize}
           defaultBookingStart={weekStart}
           defaultBookingEnd={today}
-          initialWorkingDaySummaries={workingDaySummaries}
+          clinics={clinics}
           workingDaysVisibleDate={today}
         />
       </div>

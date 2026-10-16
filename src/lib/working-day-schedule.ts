@@ -38,6 +38,8 @@ export type WorkingDaysGenerationValues = {
   sessionLengthMinutes: number;
   concurrentPatients: number;
   daysToGenerate: number;
+  /** Inclusive first calendar day, YYYY-MM-DD. Must be tomorrow or later. */
+  generationStartDate: string;
 };
 
 export function isWorkingWeekday(
@@ -59,9 +61,9 @@ export function hasAnyWorkingWeekday(
   return WORKING_WEEKDAYS.some((weekday) => values[weekday.key]);
 }
 
-/** Calendar dates for the next `daysToGenerate` records after `lastGenerationDay`. */
+/** Calendar dates for the next `daysToGenerate` working days on or after `startDate`. */
 export function enumerateGenerationDates(
-  lastGenerationDay: Date,
+  startDate: Date,
   daysToGenerate: number,
   values: Pick<WorkingDaysGenerationValues, WorkingWeekdayKey>,
 ): Date[] {
@@ -70,7 +72,8 @@ export function enumerateGenerationDates(
   }
 
   const dates: Date[] = [];
-  let cursor = addCalendarDays(lastGenerationDay, 1);
+  let cursor = new Date(startDate);
+  cursor.setHours(0, 0, 0, 0);
   const maxCalendarDays = Math.max(daysToGenerate * 7, 366);
 
   for (let scanned = 0; scanned < maxCalendarDays && dates.length < daysToGenerate; scanned++) {
@@ -122,11 +125,35 @@ export function formatIsoDate(date: Date): string {
 }
 
 export function parseIsoDate(value: string): Date {
+  return parseCalendarDate(value) ?? startOfToday();
+}
+
+/** Local midnight for a real YYYY-MM-DD value, or null when the text is not a calendar date. */
+export function parseCalendarDate(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) {
-    return startOfToday();
+    return null;
   }
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+/** First date the generator may start on: tomorrow, local calendar. */
+export function earliestGenerationDate(): Date {
+  return addCalendarDays(startOfToday(), 1);
+}
+
+export function isAllowedGenerationStart(date: Date): boolean {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day.getTime() >= earliestGenerationDate().getTime();
 }
 
 export function parseTimeToMinutes(value: string): number | null {
@@ -225,6 +252,11 @@ export function validateWorkingDaysForm(values: WorkingDaysGenerationValues): st
     return "How many days to generate must be a whole number greater than 0.";
   }
 
+  const generationStart = parseCalendarDate(values.generationStartDate);
+  if (!generationStart || !isAllowedGenerationStart(generationStart)) {
+    return "Start of generation must be tomorrow or a later date.";
+  }
+
   if (!hasAnyWorkingWeekday(values)) {
     return "Select at least one weekday to generate working days.";
   }
@@ -271,11 +303,15 @@ function seatsInSlot(
   return concurrentPatients;
 }
 
-/** Days after `lastGenerationDay`, one header per day and one detail row per seat. */
+/** Working days on or after `generationStartDate`, one header per day and one detail row per seat. */
 export function buildGeneratedWorkingDays(
   values: WorkingDaysGenerationValues,
-  lastGenerationDay: Date,
 ): GeneratedWorkingDay[] {
+  const generationStart = parseCalendarDate(values.generationStartDate);
+  if (!generationStart || !isAllowedGenerationStart(generationStart)) {
+    return [];
+  }
+
   const workingStart = parseTimeToMinutes(values.workingStartTime);
   if (workingStart === null) {
     return [];
@@ -299,7 +335,7 @@ export function buildGeneratedWorkingDays(
   }
 
   const generationDates = enumerateGenerationDates(
-    lastGenerationDay,
+    generationStart,
     values.daysToGenerate,
     values,
   );

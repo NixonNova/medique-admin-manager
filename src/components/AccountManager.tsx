@@ -70,7 +70,6 @@ type AccountManagerProps = {
   clinics: Clinic[];
   actorRole: Role | null;
   actorId: string;
-  initialLastGenerationDate: string | null;
 };
 
 type TreeUiContextValue = {
@@ -104,7 +103,7 @@ function UserInfoTabPanel({ children, index, value }: UserInfoTabPanelProps) {
       id={`user-info-tabpanel-${index}`}
       aria-labelledby={`user-info-tab-${index}`}
     >
-      {value === index ? <Box sx={{ pt: 2 }}>{children}</Box> : null}
+      {value === index ? <Box sx={{ pt: 1 }}>{children}</Box> : null}
     </div>
   );
 }
@@ -184,7 +183,6 @@ export default function AccountManager({
   clinics,
   actorRole,
   actorId,
-  initialLastGenerationDate,
 }: AccountManagerProps) {
   const router = useRouter();
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
@@ -214,8 +212,10 @@ export default function AccountManager({
   const selectedUser = selectedUserId ? usersById.get(selectedUserId) : null;
   const selectedUserRole = primaryRole(selectedUser?.role);
   const showUsersTab = selectedUserRole === "admin";
+  const showClinicsTab = selectedUserRole === "admin";
+  const showWorkingDaysTab = selectedUserRole === "user";
   const clinicsTabIndex = showUsersTab ? 1 : 0;
-  const workingDaysTabIndex = clinicsTabIndex + 1;
+  const workingDaysTabIndex = (showUsersTab ? 1 : 0) + (showClinicsTab ? 1 : 0);
   const usersUnderAdmin = useMemo(() => {
     if (!selectedUser || !showUsersTab) {
       return [];
@@ -478,11 +478,11 @@ export default function AccountManager({
           </Stack>
         </Paper>
         {selectedUser && (selectedUserRole === "admin" || selectedUserRole === "user") ? (
-          <Paper elevation={3} className="min-w-0 w-full p-8 sm:p-10">
-            <Typography variant="h6" component="h2" className="mb-4">
+          <Paper elevation={3} className="min-w-0 w-full p-4 sm:p-5">
+            <Typography variant="h6" component="h2" className="mb-2">
               User Info
             </Typography>
-            <Stack spacing={1.5}>
+            <Stack spacing={0.5}>
               <Typography variant="body1">
                 <span className="font-semibold">Full Name:</span> {selectedUser.name}
               </Typography>
@@ -494,23 +494,27 @@ export default function AccountManager({
                 {selectedUserRole ? ROLE_LABELS[selectedUserRole] : ""}
               </Typography>
             </Stack>
-            <Box sx={{ borderBottom: 1, borderColor: "divider", mt: 3 }}>
+            <Box sx={{ borderBottom: 1, borderColor: "divider", mt: 1.5 }}>
               <Tabs
                 value={userInfoTab}
                 onChange={(_event, newValue: number) => setUserInfoTab(newValue)}
                 aria-label="User info sections"
               >
                 {showUsersTab ? <Tab label="Users" {...userInfoTabA11yProps(0)} /> : null}
-                <Tab label="Clinics" {...userInfoTabA11yProps(clinicsTabIndex)} />
-                <Tab
-                  label="Working Days Generator"
-                  {...userInfoTabA11yProps(workingDaysTabIndex)}
-                />
+                {showClinicsTab ? (
+                  <Tab label="Clinics" {...userInfoTabA11yProps(clinicsTabIndex)} />
+                ) : null}
+                {showWorkingDaysTab ? (
+                  <Tab
+                    label="Working Days Generator"
+                    {...userInfoTabA11yProps(workingDaysTabIndex)}
+                  />
+                ) : null}
               </Tabs>
             </Box>
             {showUsersTab ? (
               <UserInfoTabPanel value={userInfoTab} index={0}>
-                <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+                <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
                   <Button
                     variant="contained"
                     onClick={() => {
@@ -562,57 +566,62 @@ export default function AccountManager({
                 </TableContainer>
               </UserInfoTabPanel>
             ) : null}
-            <UserInfoTabPanel value={userInfoTab} index={clinicsTabIndex}>
-              <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
-                <Button variant="contained" onClick={openCreateClinic}>
-                  New Clinic
-                </Button>
-              </Box>
-              <TableContainer>
-                <Table size="small" aria-label="Clinics">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 600 }}>ID</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Clinic Name</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Address</TableCell>
-                      <TableCell sx={{ width: 56 }} />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {clinics.length === 0 ? (
+            {showClinicsTab ? (
+              <UserInfoTabPanel value={userInfoTab} index={clinicsTabIndex}>
+                <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+                  <Button variant="contained" onClick={openCreateClinic}>
+                    New Clinic
+                  </Button>
+                </Box>
+                <TableContainer>
+                  <Table size="small" aria-label="Clinics">
+                    <TableHead>
                       <TableRow>
-                        <TableCell colSpan={4} align="center" sx={{ py: 2, color: "text.secondary" }}>
-                          No clinics.
-                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>ID</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Clinic Name</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Address</TableCell>
+                        <TableCell sx={{ width: 56 }} />
                       </TableRow>
-                    ) : (
-                      clinics.map((clinic) => (
-                        <TableRow key={clinic.id} hover>
-                          <TableCell>{clinic.id}</TableCell>
-                          <TableCell>{clinic.name}</TableCell>
-                          <TableCell>{clinic.address}</TableCell>
-                          <TableCell align="right">
-                            <IconButton
-                              size="small"
-                              aria-label={`Edit ${clinic.name}`}
-                              onClick={() => openEditClinic(clinic)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
+                    </TableHead>
+                    <TableBody>
+                      {clinics.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center" sx={{ py: 2, color: "text.secondary" }}>
+                            No clinics.
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </UserInfoTabPanel>
-            <UserInfoTabPanel value={userInfoTab} index={workingDaysTabIndex}>
-              <WorkingDaysGenerationForm
-                accountKey={selectedUser.id}
-                initialLastGenerationDate={initialLastGenerationDate}
-              />
-            </UserInfoTabPanel>
+                      ) : (
+                        clinics.map((clinic) => (
+                          <TableRow key={clinic.id} hover>
+                            <TableCell>{clinic.id}</TableCell>
+                            <TableCell>{clinic.name}</TableCell>
+                            <TableCell>{clinic.address}</TableCell>
+                            <TableCell align="right">
+                              <IconButton
+                                size="small"
+                                aria-label={`Edit ${clinic.name}`}
+                                onClick={() => openEditClinic(clinic)}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </UserInfoTabPanel>
+            ) : null}
+            {showWorkingDaysTab ? (
+              <UserInfoTabPanel value={userInfoTab} index={workingDaysTabIndex}>
+                <WorkingDaysGenerationForm
+                  accountKey={selectedUser.id}
+                  userId={selectedUser.id}
+                  clinics={clinics}
+                />
+              </UserInfoTabPanel>
+            ) : null}
           </Paper>
         ) : (
           <div className="hidden min-w-0 lg:block" aria-hidden />

@@ -5,17 +5,22 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { primaryRole } from "@/lib/roles";
 import { validateWorkingDaysForm, type WorkingDaysGenerationValues } from "@/lib/working-day-schedule";
-import { saveGeneratedWorkingDays } from "@/lib/working-days-store";
+import {
+  checkGeneratedTimeSlots,
+  saveGeneratedWorkingDays,
+  WORKING_DAYS_UNAVAILABLE_MESSAGE,
+} from "@/lib/working-days-store";
 
-export type GenerateWorkingDaysResult =
-  | { ok: true; lastGenerationDate: string }
-  | { ok: false; error: string };
+export type GenerateWorkingDaysResult = { ok: true } | { ok: false; error: string };
 
-function failure(error: string): GenerateWorkingDaysResult {
+function failure(error: string): { ok: false; error: string } {
   return { ok: false, error };
 }
 
 function readErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message === WORKING_DAYS_UNAVAILABLE_MESSAGE) {
+    return error.message;
+  }
   if (error instanceof Error && /UNIQUE/i.test(error.message)) {
     return "Working days for that date range already exist.";
   }
@@ -25,9 +30,19 @@ function readErrorMessage(error: unknown) {
   return "Could not generate working days.";
 }
 
-export async function generateWorkingDays(
-  values: WorkingDaysGenerationValues,
-): Promise<GenerateWorkingDaysResult> {
+export type GenerateWorkingDaysInput = {
+  values: WorkingDaysGenerationValues;
+  clinicId: number;
+  userId: string;
+};
+
+export type CheckWorkingDayTimeSlotsResult = { ok: true } | { ok: false; error: string };
+
+type PreparedGeneration =
+  | { ok: true; values: WorkingDaysGenerationValues; clinicId: number; userId: string }
+  | { ok: false; error: string };
+
+async function prepareGeneration(input: GenerateWorkingDaysInput): Promise<PreparedGeneration> {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -40,15 +55,59 @@ export async function generateWorkingDays(
     return failure("You cannot generate working days.");
   }
 
+  const { values, clinicId, userId } = input;
+  if (!Number.isInteger(clinicId) || clinicId < 1) {
+    return failure("Select a clinic.");
+  }
+  if (typeof userId !== "string" || userId.trim().length === 0) {
+    return failure("Select a user.");
+  }
+
   const validationError = validateWorkingDaysForm(values);
   if (validationError) {
     return failure(validationError);
   }
 
+  return { ok: true, values, clinicId, userId: userId.trim() };
+}
+
+export async function checkWorkingDayTimeSlots(
+  input: GenerateWorkingDaysInput,
+): Promise<CheckWorkingDayTimeSlotsResult> {
+  const prepared = await prepareGeneration(input);
+  if (!prepared.ok) {
+    return prepared;
+  }
+
   try {
-    const saved = await saveGeneratedWorkingDays(values);
+    const conflict = await checkGeneratedTimeSlots(prepared.values, {
+      clinicId: prepared.clinicId,
+      userId: prepared.userId,
+    });
+    if (conflict) {
+      return failure(conflict);
+    }
+    return { ok: true };
+  } catch (error) {
+    return failure(readErrorMessage(error));
+  }
+}
+
+export async function generateWorkingDays(
+  input: GenerateWorkingDaysInput,
+): Promise<GenerateWorkingDaysResult> {
+  const prepared = await prepareGeneration(input);
+  if (!prepared.ok) {
+    return prepared;
+  }
+
+  try {
+    await saveGeneratedWorkingDays(prepared.values, {
+      clinicId: prepared.clinicId,
+      userId: prepared.userId,
+    });
     revalidatePath("/account-manager");
-    return { ok: true, lastGenerationDate: saved.lastGenerationDate };
+    return { ok: true };
   } catch (error) {
     return failure(readErrorMessage(error));
   }

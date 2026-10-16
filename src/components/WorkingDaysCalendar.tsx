@@ -2,18 +2,21 @@
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import Box from "@mui/material/Box";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { EventCalendar, eventCalendarClasses } from "@mui/x-scheduler/event-calendar";
 import type { SchedulerEvent } from "@mui/x-scheduler/models";
 import type { SchedulerRenderableEventOccurrence } from "@mui/x-scheduler/models";
 import { fetchWorkingDaySummaries } from "@/app/actions/list-working-day-summaries";
 import WorkingDayPatientsDialog from "@/components/WorkingDayPatientsDialog";
+import type { Clinic } from "@/lib/clinics";
 import type { WorkingDaySlotSummary } from "@/lib/working-days-store";
 import { formatIsoDate, parseIsoDate } from "@/lib/working-day-schedule";
 
 type WorkingDaysCalendarProps = {
-  initialSummaries: WorkingDaySlotSummary[];
+  clinics: Clinic[];
   initialVisibleDate: string;
 };
 
@@ -90,13 +93,13 @@ function getIsoDateFromMonthViewCell(cell: Element, visibleMonth: Date): string 
 }
 
 export default function WorkingDaysCalendar({
-  initialSummaries,
+  clinics,
   initialVisibleDate,
 }: WorkingDaysCalendarProps) {
   const calendarRef = useRef<HTMLDivElement>(null);
-  const initialBounds = monthIsoBounds(parseIsoDate(initialVisibleDate));
-  const [summaries, setSummaries] = useState(initialSummaries);
-  const [loadedMonthKey, setLoadedMonthKey] = useState(initialBounds.monthKey);
+  const loadedKeyRef = useRef<string | null>(null);
+  const [clinicId, setClinicId] = useState("");
+  const [summaries, setSummaries] = useState<WorkingDaySlotSummary[]>([]);
   const [visibleMonth, setVisibleMonth] = useState(() => parseIsoDate(initialVisibleDate));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [patientsOpen, setPatientsOpen] = useState(false);
@@ -104,29 +107,43 @@ export default function WorkingDaysCalendar({
   const [isLoading, startLoadTransition] = useTransition();
 
   const events = useMemo(() => summariesToEvents(summaries), [summaries]);
+  const selectedClinicId = clinicId ? Number(clinicId) : null;
 
   const openPatientsForDate = useCallback((date: string) => {
     setSelectedDate(date);
     setPatientsOpen(true);
   }, []);
 
-  const loadMonth = useCallback((visibleDate: Date) => {
-    const bounds = monthIsoBounds(visibleDate);
-    if (bounds.monthKey === loadedMonthKey) {
+  const loadSummaries = useCallback((visibleDate: Date, selectedClinic: string) => {
+    if (!selectedClinic) {
+      loadedKeyRef.current = null;
+      setSummaries([]);
+      setLoadError(null);
       return;
     }
 
+    const bounds = monthIsoBounds(visibleDate);
+    const nextKey = `${selectedClinic}:${bounds.monthKey}`;
+    if (loadedKeyRef.current === nextKey) {
+      return;
+    }
+    loadedKeyRef.current = nextKey;
+
     startLoadTransition(async () => {
       setLoadError(null);
-      const result = await fetchWorkingDaySummaries(bounds.start, bounds.end);
+      const result = await fetchWorkingDaySummaries(bounds.start, bounds.end, Number(selectedClinic));
+      if (loadedKeyRef.current !== nextKey) {
+        return;
+      }
       if (!result.ok) {
+        loadedKeyRef.current = null;
+        setSummaries([]);
         setLoadError(result.error);
         return;
       }
       setSummaries(result.data);
-      setLoadedMonthKey(bounds.monthKey);
     });
-  }, [loadedMonthKey]);
+  }, []);
 
   const handleCalendarClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -157,8 +174,35 @@ export default function WorkingDaysCalendar({
     <>
       <Paper elevation={1} sx={{ overflow: "hidden", opacity: isLoading ? 0.72 : 1 }}>
         <Box sx={{ px: 2, pt: 2, pb: 0.5 }}>
+          <TextField
+            select
+            label="Clinic"
+            size="small"
+            value={clinicId}
+            onChange={(event) => {
+              const nextClinicId = event.target.value;
+              setClinicId(nextClinicId);
+              loadSummaries(visibleMonth, nextClinicId);
+            }}
+            disabled={clinics.length === 0}
+            helperText={
+              clinics.length === 0 ? "Add a clinic before viewing working days." : undefined
+            }
+            sx={{ minWidth: 260, mb: 1.5 }}
+          >
+            <MenuItem value="">
+              <em>Select a clinic</em>
+            </MenuItem>
+            {clinics.map((clinic) => (
+              <MenuItem key={clinic.id} value={String(clinic.id)}>
+                {clinic.name}
+              </MenuItem>
+            ))}
+          </TextField>
           <Typography variant="body2" color="text.secondary">
-            Each day shows verified bookings / total slots. Click a day to view patients by time slot.
+            {clinicId
+              ? "Each day shows verified bookings / total slots. Click a day to view patients by time slot."
+              : "Select a clinic to show verified bookings / total slots on each day."}
           </Typography>
           {loadError ? (
             <Typography variant="caption" color="error" sx={{ mt: 0.5, display: "block" }}>
@@ -166,7 +210,7 @@ export default function WorkingDaysCalendar({
             </Typography>
           ) : null}
         </Box>
-        <Box ref={calendarRef} onClick={handleCalendarClick} sx={{ cursor: "pointer" }}>
+        <Box ref={calendarRef} onClick={handleCalendarClick} sx={{ cursor: "pointer", px: 2, pb: 2 }}>
           <EventCalendar
             events={events}
             views={["month"]}
@@ -176,7 +220,7 @@ export default function WorkingDaysCalendar({
               const date =
                 visibleDate instanceof Date ? visibleDate : new Date(visibleDate as string | number);
               setVisibleMonth(date);
-              loadMonth(date);
+              loadSummaries(date, clinicId);
             }}
             onEventEditingStart={handleEventEditingStart}
             readOnly
@@ -197,6 +241,7 @@ export default function WorkingDaysCalendar({
       <WorkingDayPatientsDialog
         open={patientsOpen}
         date={selectedDate}
+        clinicId={selectedClinicId}
         onClose={() => setPatientsOpen(false)}
       />
     </>

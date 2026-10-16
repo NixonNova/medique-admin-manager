@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import AppMenu from "@/components/AppMenu";
 import { auth } from "@/lib/auth";
@@ -23,6 +24,9 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
             Medique Admin Manager
           </p>
           <p className="mt-2 text-sm text-slate-700">{session.user.email}</p>
+          <Link href="/reset-password" className="mt-1 inline-block text-xs text-teal-700 hover:underline">
+            Reset Password
+          </Link>
         </div>
         <nav className="flex-1 px-2 py-3">
           <AppMenu viewerRole={viewerRole} />

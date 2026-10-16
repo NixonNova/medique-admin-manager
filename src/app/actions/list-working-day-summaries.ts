@@ -20,6 +20,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export async function fetchWorkingDaySummaries(
   dateStart: string,
   dateEnd: string,
+  clinicId: number,
 ): Promise<FetchWorkingDaySummariesResult> {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -34,7 +35,10 @@ export async function fetchWorkingDaySummaries(
   if (dateStart > dateEnd) {
     return failure("Start date must be on or before the end date.");
   }
+  if (!Number.isInteger(clinicId) || clinicId < 1) {
+    return failure("Select a clinic.");
+  }
 
-  const data = await listWorkingDaySlotSummaries(dateStart, dateEnd);
+  const data = await listWorkingDaySlotSummaries(dateStart, dateEnd, clinicId);
   return { ok: true, data };
 }

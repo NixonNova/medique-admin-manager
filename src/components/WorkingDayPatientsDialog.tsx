@@ -18,6 +18,7 @@ import { parseIsoDate } from "@/lib/working-day-schedule";
 type WorkingDayPatientsDialogProps = {
   open: boolean;
   date: string | null;
+  clinicId: number | null;
   onClose: () => void;
 };
 
@@ -33,6 +34,7 @@ function formatDialogTitle(isoDate: string): string {
 export default function WorkingDayPatientsDialog({
   open,
   date,
+  clinicId,
   onClose,
 }: WorkingDayPatientsDialogProps) {
   const [schedule, setSchedule] = useState<WorkingDayPatientSchedule | null>(null);
@@ -40,27 +42,31 @@ export default function WorkingDayPatientsDialog({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!open || !date) {
+    if (!open || !date || clinicId === null) {
       return;
     }
 
     startTransition(async () => {
       setError(null);
       setSchedule(null);
-      const result = await fetchWorkingDayPatientSchedule(date);
+      const result = await fetchWorkingDayPatientSchedule(date, clinicId);
       if (!result.ok) {
         setError(result.error);
         return;
       }
       setSchedule(result.data);
     });
-  }, [open, date]);
+  }, [open, date, clinicId]);
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>{date ? formatDialogTitle(date) : "Patients"}</DialogTitle>
       <DialogContent dividers sx={{ pt: 1 }}>
-        {error ? (
+        {clinicId === null ? (
+          <Typography variant="body2" color="text.secondary">
+            Select a clinic to view patients.
+          </Typography>
+        ) : error ? (
           <Typography variant="body2" color="error">
             {error}
           </Typography>
@@ -77,7 +83,8 @@ export default function WorkingDayPatientsDialog({
             <Table size="small" aria-label="Patients by time slot">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 600, width: "36%" }}>Time</TableCell>
+                  <TableCell sx={{ fontWeight: 600, width: "24%" }}>Time</TableCell>
+                  <TableCell sx={{ fontWeight: 600, width: "32%" }}>Practitioner</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Patients</TableCell>
                 </TableRow>
               </TableHead>
@@ -86,6 +93,9 @@ export default function WorkingDayPatientsDialog({
                   <TableRow key={slot.timeLabel}>
                     <TableCell sx={{ verticalAlign: "top", whiteSpace: "nowrap" }}>
                       {slot.timeLabel}
+                    </TableCell>
+                    <TableCell sx={{ verticalAlign: "top" }}>
+                      {slot.practitionerName}
                     </TableCell>
                     <TableCell sx={{ verticalAlign: "top" }}>
                       {slot.patients.length === 0
