@@ -4,6 +4,7 @@ import { useCallback, useState, useTransition, type ChangeEvent, type ReactNode 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
+import Chip from "@mui/material/Chip";
 import Pagination from "@mui/material/Pagination";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -33,23 +34,28 @@ type ManageBookingsTableProps = {
   workingDaysVisibleDate: string;
 };
 
-function VerifiedOnCell({ verifiedOn, session }: Pick<BookingTableRow, "verifiedOn" | "session">) {
+const statusChipSx = {
+  height: 20,
+  "& .MuiChip-label": { px: 0.75, fontSize: "0.7rem" },
+} as const;
+
+function BookingSlotCell({ bookingSlot, expired }: Pick<BookingTableRow, "bookingSlot" | "expired">) {
+  return (
+    <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: "center" }}>
+      <span>{bookingSlot ?? "-"}</span>
+      {expired ? (
+        <Chip label="expired booking" size="small" color="warning" variant="outlined" sx={statusChipSx} />
+      ) : null}
+    </Stack>
+  );
+}
+
+function VerifiedOnCell({ verifiedOn }: Pick<BookingTableRow, "verifiedOn">) {
   if (!verifiedOn) {
     return <>-</>;
   }
 
-  return (
-    <Box>
-      <Typography component="span" variant="body2">
-        {verifiedOn}
-      </Typography>
-      {session ? (
-        <Typography component="div" variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-          session: {session}
-        </Typography>
-      ) : null}
-    </Box>
-  );
+  return <Chip label={verifiedOn} size="small" color="success" variant="outlined" sx={statusChipSx} />;
 }
 
 function manageBookingsTabA11yProps(index: number) {
@@ -145,13 +151,8 @@ export default function ManageBookingsTable({
     loadPage(1, bookingStart, bookingEnd);
   }
 
-  function handleClearFilter() {
-    setBookingStart("");
-    setBookingEnd("");
-    setAppliedStart("");
-    setAppliedEnd("");
-    setFilterError(null);
-    loadPage(1, "", "");
+  function handleReload() {
+    loadPage(page, appliedStart, appliedEnd);
   }
 
   function handlePageChange(_: ChangeEvent<unknown>, value: number) {
@@ -195,7 +196,7 @@ export default function ManageBookingsTable({
               direction={{ xs: "column", sm: "row" }}
               spacing={1.5}
               useFlexGap
-              sx={{ flexWrap: "wrap", alignItems: { xs: "stretch", sm: "flex-end" } }}
+              sx={{ width: "100%", flexWrap: "wrap", alignItems: { xs: "stretch", sm: "flex-end" } }}
             >
               <TextField
                 label="Booking from"
@@ -215,14 +216,18 @@ export default function ManageBookingsTable({
                 slotProps={{ inputLabel: { shrink: true } }}
                 sx={{ width: { xs: "100%", sm: 160 } }}
               />
-              <Stack direction="row" spacing={1}>
-                <Button size="small" variant="contained" disabled={busy} onClick={handleApplyFilter}>
-                  Apply
-                </Button>
-                <Button size="small" variant="outlined" disabled={busy} onClick={handleClearFilter}>
-                  Clear
-                </Button>
-              </Stack>
+              <Button size="small" variant="contained" disabled={busy} onClick={handleApplyFilter}>
+                Apply
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={busy}
+                onClick={handleReload}
+                sx={{ alignSelf: "flex-end", ml: { sm: "auto" } }}
+              >
+                Reload
+              </Button>
             </Stack>
      
             {filterError ? (
@@ -238,6 +243,10 @@ export default function ManageBookingsTable({
                 <TableRow>
                   <TableCell>Booking time</TableCell>
                   <TableCell>Name</TableCell>
+                  <TableCell>Phone</TableCell>
+                  <TableCell>Clinic</TableCell>
+                  <TableCell>Practitioner</TableCell>
+                  <TableCell>Booking Slot</TableCell>
                   <TableCell>Verified on</TableCell>
                   <TableCell>Verified by</TableCell>
                   <TableCell align="right">Action</TableCell>
@@ -246,7 +255,7 @@ export default function ManageBookingsTable({
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 2, color: "text.secondary" }}>
+                    <TableCell colSpan={9} align="center" sx={{ py: 2, color: "text.secondary" }}>
                       No bookings match your filters.
                     </TableCell>
                   </TableRow>
@@ -259,15 +268,21 @@ export default function ManageBookingsTable({
                       <TableRow key={row.id} hover>
                         <TableCell>{row.bookedTime}</TableCell>
                         <TableCell>{row.name}</TableCell>
-                        <TableCell>
-                          <VerifiedOnCell verifiedOn={row.verifiedOn} session={row.session} />
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>{row.contactPhoneNumber ?? "-"}</TableCell>
+                        <TableCell>{row.clinic ?? "-"}</TableCell>
+                        <TableCell>{row.practitioner ?? "-"}</TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          <BookingSlotCell bookingSlot={row.bookingSlot} expired={row.expired} />
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          <VerifiedOnCell verifiedOn={row.verifiedOn} />
                         </TableCell>
                         <TableCell>{row.verifiedBy ?? "-"}</TableCell>
                         <TableCell align="right" sx={{ py: 0.25, width: 48 }}>
                           <Checkbox
                             size="small"
                             checked={verified}
-                            disabled={busy || rowBusy}
+                            disabled={busy || rowBusy || row.expired}
                             onChange={(_, checked) => handleVerificationChange(row.id, checked)}
                             sx={{ p: 0.25 }}
                             slotProps={{

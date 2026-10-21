@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { ensureBookingColumns } from "@/lib/bookings-store";
 import { ensureClinics } from "@/lib/clinics";
 import { ensureUserTypes } from "@/lib/user-types";
 import { ensureWorkingDayReferences } from "@/lib/working-days-store";
@@ -19,6 +20,7 @@ export async function ensureAdmin() {
   await ensureUserTypes();
   await ensureClinics();
   await ensureWorkingDayReferences();
+  await ensureBookingColumns();
 
   const tenantAdmins = await context.adapter.findMany<{ id: string; role?: string | null; adminId?: string | null }>({
     model: "user",

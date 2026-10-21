@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import type { BookingTableRow } from "@/lib/bookings-types";
-import { NoAvailableSessionSlotError, setBookingVerified } from "@/lib/bookings-store";
+import { BookingVerificationError, setBookingVerified } from "@/lib/bookings-store";
 
 export type ToggleBookingVerificationResult =
   | { ok: true; row: BookingTableRow }
@@ -39,7 +39,7 @@ export async function toggleBookingVerification(
     revalidatePath("/manage-bookings");
     return { ok: true, row };
   } catch (error) {
-    if (error instanceof NoAvailableSessionSlotError) {
+    if (error instanceof BookingVerificationError) {
       return failure(error.message);
     }
     return failure("Could not update booking verification.");

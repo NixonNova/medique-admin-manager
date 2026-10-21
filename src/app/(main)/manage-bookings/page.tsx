@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 export default async function ManageBookingsPage() {
   const todayDate = startOfToday();
   const today = formatIsoDate(todayDate);
-  const weekStart = formatIsoDate(addCalendarDays(todayDate, -7));
+  const rangeStart = formatIsoDate(addCalendarDays(todayDate, -1));
   const clinics = await listClinics();
   const { rows, totalCount, pageSize } = await listBookings({
-    bookingStart: weekStart,
+    bookingStart: rangeStart,
     bookingEnd: today,
   });
 
@@ -25,7 +25,7 @@ export default async function ManageBookingsPage() {
           initialRows={rows}
           initialTotalCount={totalCount}
           pageSize={pageSize}
-          defaultBookingStart={weekStart}
+          defaultBookingStart={rangeStart}
           defaultBookingEnd={today}
           clinics={clinics}
           workingDaysVisibleDate={today}

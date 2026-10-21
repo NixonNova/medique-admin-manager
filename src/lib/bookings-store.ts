@@ -1,10 +1,43 @@
 import type { BookingTableRow } from "@/lib/bookings-types";
 import { type AppDatabase, getAppDatabase } from "@/lib/app-database";
+import {
+  formatIsoDate,
+  formatMinutesAsTime,
+  parseCalendarDate,
+  parseTimeToMinutes,
+  startOfToday,
+} from "@/lib/working-day-schedule";
+
+let ensureBookingColumnsPromise: Promise<void> | null = null;
+
+/** Appointment date and slot the patient is booking. BookingTime stays the record timestamp. */
+export function ensureBookingColumns(): Promise<void> {
+  if (!ensureBookingColumnsPromise) {
+    ensureBookingColumnsPromise = addBookingColumns().catch((error: unknown) => {
+      ensureBookingColumnsPromise = null;
+      throw error;
+    });
+  }
+  return ensureBookingColumnsPromise;
+}
+
+async function addBookingColumns() {
+  const db = await getAppDatabase();
+  await db.exec(`
+    ALTER TABLE "Booking"
+      ADD COLUMN IF NOT EXISTS "BookingSlot" text
+  `);
+}
 
 type BookingDbRow = {
   id: number;
   bookingTime: string;
   fullName: string;
+  contactPhoneNumber: string | null;
+  clinicName: string | null;
+  practitionerName: string | null;
+  practitionerEmail: string | null;
+  bookingSlot: string | null;
   verifiedOn: string | null;
   sessionHeaderDate: string | null;
   sessionStart: string | null;
@@ -69,6 +102,75 @@ function formatDateTime(date: Date): string {
   return `${day} ${month} ${year} ${time}`;
 }
 
+type ParsedBookingSlot = {
+  date: string;
+  start: string;
+  end: string;
+};
+
+/** `YYYY-MM-DD HH:MM-HH:MM`, with times normalized to `HH:MM`. */
+function parseBookingSlot(value: string | null): ParsedBookingSlot | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const date = parseCalendarDate(match[1]);
+  const startMinutes = parseTimeToMinutes(match[2]);
+  const endMinutes = parseTimeToMinutes(match[3]);
+  if (!date || startMinutes === null || endMinutes === null) {
+    return null;
+  }
+
+  return {
+    date: formatIsoDate(date),
+    start: formatMinutesAsTime(startMinutes),
+    end: formatMinutesAsTime(endMinutes),
+  };
+}
+
+function formatBookingSlot(value: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = parseBookingSlot(trimmed);
+  if (!parsed) {
+    return trimmed;
+  }
+
+  const date = parseIsoDate(parsed.date);
+  const day = date.getDate();
+  const month = date.toLocaleString("en-GB", { month: "short" });
+  const year = date.getFullYear();
+  return `${day} ${month} ${year} ${parsed.start}-${parsed.end}`;
+}
+
+/** Unverified bookings whose selected slot date is before today. */
+function isExpiredBookingSlot(value: string | null, verifiedOn: string | null): boolean {
+  if (verifiedOn) {
+    return false;
+  }
+
+  const parsed = parseBookingSlot(value);
+  if (!parsed) {
+    return false;
+  }
+
+  const slotDate = parseCalendarDate(parsed.date);
+  if (!slotDate) {
+    return false;
+  }
+
+  return slotDate.getTime() < startOfToday().getTime();
+}
+
 function formatSessionFromWorkingDay(isoDate: string, start: string, slot: number): string {
   const date = parseIsoDate(isoDate);
   const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(start.trim());
@@ -78,16 +180,23 @@ function formatSessionFromWorkingDay(isoDate: string, start: string, slot: numbe
   return `${slot} · ${formatDateTime(date)}`;
 }
 
-async function findEarliestAvailableDetailId(db: AppDatabase): Promise<number | null> {
+async function findAvailableDetailIdForSlot(
+  db: AppDatabase,
+  slot: ParsedBookingSlot,
+): Promise<number | null> {
   const row = await db.get<{ id: number }>(
     `
       SELECT d."ID" AS id
       FROM "WorkingDayDetail" d
       INNER JOIN "WorkingDayHeader" h ON h."ID" = d."Header"
       WHERE d."BookingID" IS NULL
-      ORDER BY h."Date" ASC, d."Start" ASC, d."Slot" ASC, d."ID" ASC
+        AND h."Date" = ?
+        AND d."Start" = ?
+        AND d."End" = ?
+      ORDER BY d."Slot" ASC, d."ID" ASC
       LIMIT 1
     `,
+    [slot.date, slot.start, slot.end],
   );
   return row?.id ?? null;
 }
@@ -108,8 +217,12 @@ async function releaseBookingSession(db: AppDatabase, bookingId: number) {
   await db.run(`UPDATE "Booking" SET "SessionID" = NULL WHERE "ID" = ?`, [bookingId]);
 }
 
-async function assignEarliestSessionToBooking(db: AppDatabase, bookingId: number) {
-  const detailId = await findEarliestAvailableDetailId(db);
+async function assignSelectedSlotToBooking(
+  db: AppDatabase,
+  bookingId: number,
+  slot: ParsedBookingSlot,
+) {
+  const detailId = await findAvailableDetailIdForSlot(db, slot);
   if (detailId === null) {
     throw new NoAvailableSessionSlotError();
   }
@@ -148,6 +261,11 @@ function mapRowToListItem(row: BookingDbRow): BookingTableRow {
     id: String(row.id),
     bookedTime: formatDateTime(parseBookingTime(row.bookingTime)),
     name: row.fullName,
+    contactPhoneNumber: row.contactPhoneNumber?.trim() || null,
+    clinic: row.clinicName?.trim() || null,
+    practitioner: formatVerifiedByDisplay(row.practitionerName, row.practitionerEmail),
+    bookingSlot: formatBookingSlot(row.bookingSlot),
+    expired: isExpiredBookingSlot(row.bookingSlot, row.verifiedOn),
     verifiedOn: verifiedDisplay,
     session: sessionDisplay,
     verifiedBy: verifiedDisplay
@@ -160,6 +278,8 @@ const bookingFromJoin = `
   FROM "Booking" b
   LEFT JOIN "WorkingDayDetail" d ON d."ID" = b."SessionID"
   LEFT JOIN "WorkingDayHeader" h ON h."ID" = d."Header"
+  LEFT JOIN "clinic" c ON c."ID" = h."ClinicID"
+  LEFT JOIN "user" practitioner ON practitioner.id = d."UserID"
   LEFT JOIN "user" verifier ON verifier.id = b."VerifiedBy"
 `;
 
@@ -168,6 +288,11 @@ const bookingSelect = `
     b."ID" AS id,
     b."BookingTime" AS "bookingTime",
     b."FullName" AS "fullName",
+    b."ContactPhoneNumber" AS "contactPhoneNumber",
+    c."ClinicName" AS "clinicName",
+    practitioner.name AS "practitionerName",
+    practitioner.email AS "practitionerEmail",
+    b."BookingSlot" AS "bookingSlot",
     b."VerifiedOn" AS "verifiedOn",
     h."Date" AS "sessionHeaderDate",
     d."Start" AS "sessionStart",
@@ -221,6 +346,7 @@ function buildBookingTimeWhere(
 }
 
 export async function listBookings(query: ListBookingsQuery = {}): Promise<ListBookingsResult> {
+  await ensureBookingColumns();
   const db = await getAppDatabase();
 
   const pageSize = query.pageSize ?? DEFAULT_BOOKINGS_PAGE_SIZE;
@@ -247,9 +373,16 @@ export async function listBookings(query: ListBookingsQuery = {}): Promise<ListB
   };
 }
 
-export class NoAvailableSessionSlotError extends Error {
+export class BookingVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BookingVerificationError";
+  }
+}
+
+export class NoAvailableSessionSlotError extends BookingVerificationError {
   constructor() {
-    super("No available session slot.");
+    super("No available session slot on the selected date.");
     this.name = "NoAvailableSessionSlotError";
   }
 }
@@ -259,11 +392,16 @@ export async function setBookingVerified(
   verified: boolean,
   verifiedByUserId: string | null,
 ): Promise<BookingTableRow | null> {
+  await ensureBookingColumns();
   const db = await getAppDatabase();
 
   const result = await db.transaction(async (tx) => {
-    const booking = await tx.get<{ id: number; sessionId: number | null }>(
-      `SELECT "ID" AS id, "SessionID" AS "sessionId" FROM "Booking" WHERE "ID" = ?`,
+    const booking = await tx.get<{
+      id: number;
+      sessionId: number | null;
+      bookingSlot: string | null;
+    }>(
+      `SELECT "ID" AS id, "SessionID" AS "sessionId", "BookingSlot" AS "bookingSlot" FROM "Booking" WHERE "ID" = ?`,
       [id],
     );
 
@@ -276,6 +414,14 @@ export async function setBookingVerified(
         throw new Error("VerifiedBy user id is required when verifying a booking.");
       }
 
+      const slot = parseBookingSlot(booking.bookingSlot);
+      if (!slot) {
+        throw new BookingVerificationError("This booking has no selected time slot.");
+      }
+      if (isExpiredBookingSlot(booking.bookingSlot, null)) {
+        throw new BookingVerificationError("This booking has expired.");
+      }
+
       await tx.run(`UPDATE "Booking" SET "VerifiedOn" = ?, "VerifiedBy" = ? WHERE "ID" = ?`, [
         toIsoDateTime(new Date()),
         verifiedByUserId,
@@ -283,7 +429,7 @@ export async function setBookingVerified(
       ]);
 
       if (booking.sessionId === null) {
-        await assignEarliestSessionToBooking(tx, id);
+        await assignSelectedSlotToBooking(tx, id, slot);
       }
     } else {
       await releaseBookingSession(tx, id);
