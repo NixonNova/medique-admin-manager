@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import AccountManager from "@/components/AccountManager";
 import { auth } from "@/lib/auth";
 import { listClinics } from "@/lib/clinics";
@@ -18,10 +17,6 @@ export default async function AccountManagerPage() {
     headers: await headers(),
   });
   const actorRole = primaryRole(session?.user.role);
-  if (actorRole === "user") {
-    redirect("/manage-bookings");
-  }
-
   const actorId = session?.user.id ?? "";
   const [users, userTypes, clinics] = await Promise.all([
     listUsersForTree().then((rows) => filterUsersForTreeView(rows, actorId, actorRole)),

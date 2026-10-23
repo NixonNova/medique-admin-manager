@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AppMenu from "@/components/AppMenu";
 import { auth } from "@/lib/auth";
-import { primaryRole } from "@/lib/roles";
 
 export default async function MainLayout({ children }: LayoutProps<"/">) {
   const session = await auth.api.getSession({
@@ -13,8 +12,6 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
   if (!session) {
     redirect("/login");
   }
-
-  const viewerRole = primaryRole(session.user.role);
 
   return (
     <div className="flex min-h-full flex-1">
@@ -29,7 +26,7 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
           </Link>
         </div>
         <nav className="flex-1 px-2 py-3">
-          <AppMenu viewerRole={viewerRole} />
+          <AppMenu />
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">{children}</div>

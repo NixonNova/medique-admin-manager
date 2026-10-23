@@ -2,7 +2,7 @@ export const ROLES = ["medique admin", "admin", "user"] as const;
 
 export type Role = (typeof ROLES)[number];
 
-export const MEDIQUE_ADMIN_EMAILS = ["admin@medique.com"] as const;
+export const MEDIQUE_ADMIN_EMAILS = ["admin@medique.id"] as const;
 
 export const ROLE_LABELS: Record<Role, string> = {
   "medique admin": "Platform Admin",

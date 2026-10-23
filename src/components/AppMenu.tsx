@@ -5,11 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import { authClient } from "@/lib/auth-client";
-import type { Role } from "@/lib/roles";
-
-type AppMenuProps = {
-  viewerRole: Role | null;
-};
 
 function selectedItemId(pathname: string) {
   if (pathname.startsWith("/account-manager") || pathname === "/") {
@@ -21,7 +16,7 @@ function selectedItemId(pathname: string) {
   return null;
 }
 
-export default function AppMenu({ viewerRole }: AppMenuProps) {
+export default function AppMenu() {
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
@@ -45,15 +40,13 @@ export default function AppMenu({ viewerRole }: AppMenuProps) {
     }
   }
 
-  const isUser = viewerRole === "user";
-
   return (
     <SimpleTreeView
       aria-label="Main menu"
       selectedItems={selectedItemId(pathname)}
       onItemClick={handleItemClick}
     >
-      {!isUser ? <TreeItem itemId="account-manager" label="Account Manager" /> : null}
+      <TreeItem itemId="account-manager" label="Account Manager" />
       <TreeItem itemId="manage-bookings" label="Manage Bookings" />
       <TreeItem itemId="logout" label={signingOut ? "Signing out..." : "Logout"} />
     </SimpleTreeView>

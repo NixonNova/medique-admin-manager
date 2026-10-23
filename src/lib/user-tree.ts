@@ -64,25 +64,11 @@ function collectDescendantIds(rootId: string, childrenByParent: Map<string, stri
   return descendants;
 }
 
-function collectAncestorIds(
-  userId: string,
-  usersById: Map<string, UserForTree>,
-): Set<string> {
-  const ancestors = new Set<string>();
-  let parentId = treeParentId(usersById.get(userId) ?? { id: userId, name: "", email: "" });
-
-  while (parentId) {
-    if (!usersById.has(parentId)) {
-      break;
-    }
-    ancestors.add(parentId);
-    parentId = treeParentId(usersById.get(parentId)!);
-  }
-
-  return ancestors;
-}
-
-/** Limits tree data by signed-in role (full tree for platform admins). */
+/**
+ * Limits tree data by signed-in role.
+ * Platform admins see the full tree. Tenant admins see themselves and the
+ * users created under them. Users see only themselves.
+ */
 export function filterUsersForTreeView(
   users: UserForTree[],
   actorId: string,
@@ -93,30 +79,16 @@ export function filterUsersForTreeView(
   }
 
   const usersById = new Map(users.map((user) => [user.id, user]));
-  const actor = usersById.get(actorId);
-  if (!actor) {
+  if (!usersById.has(actorId)) {
     return [];
   }
 
   const visible = new Set<string>([actorId]);
-  const childrenByParent = buildChildrenByParent(users);
 
   if (actorRole === "admin") {
-    for (const ancestorId of collectAncestorIds(actorId, usersById)) {
-      visible.add(ancestorId);
-    }
+    const childrenByParent = buildChildrenByParent(users);
     for (const descendantId of collectDescendantIds(actorId, childrenByParent)) {
       visible.add(descendantId);
-    }
-  }
-
-  if (actorRole === "user") {
-    if (actor.adminId && usersById.has(actor.adminId)) {
-      visible.add(actor.adminId);
-    } else {
-      for (const ancestorId of collectAncestorIds(actorId, usersById)) {
-        visible.add(ancestorId);
-      }
     }
   }
 
@@ -124,15 +96,19 @@ export function filterUsersForTreeView(
 }
 
 export function buildUserTreeItems(users: UserForTree[]): TreeViewDefaultItemModelProperties[] {
+  const visibleIds = new Set(users.map((user) => user.id));
   const byParent = new Map<string, UserForTree[]>();
 
   for (const user of users) {
-    const parentId = treeParentId(user) ?? USER_TREE_ROOT_ID;
-    const bucket = byParent.get(parentId);
+    const parentId = treeParentId(user);
+    // Hidden ancestors (platform admin, and a user's tenant admin) are omitted,
+    // so the first visible account hangs directly under Medique.
+    const bucketKey = parentId && visibleIds.has(parentId) ? parentId : USER_TREE_ROOT_ID;
+    const bucket = byParent.get(bucketKey);
     if (bucket) {
       bucket.push(user);
     } else {
-      byParent.set(parentId, [user]);
+      byParent.set(bucketKey, [user]);
     }
   }
 

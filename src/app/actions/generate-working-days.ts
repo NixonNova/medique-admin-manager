@@ -51,7 +51,7 @@ async function prepareGeneration(input: GenerateWorkingDaysInput): Promise<Prepa
   }
 
   const actorRole = primaryRole(session.user.role);
-  if (actorRole !== "medique admin" && actorRole !== "admin") {
+  if (actorRole !== "medique admin" && actorRole !== "admin" && actorRole !== "user") {
     return failure("You cannot generate working days.");
   }
 
@@ -61,6 +61,9 @@ async function prepareGeneration(input: GenerateWorkingDaysInput): Promise<Prepa
   }
   if (typeof userId !== "string" || userId.trim().length === 0) {
     return failure("Select a user.");
+  }
+  if (actorRole === "user" && userId.trim() !== session.user.id) {
+    return failure("You cannot generate working days.");
   }
 
   const validationError = validateWorkingDaysForm(values);

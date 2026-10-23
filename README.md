@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env.local` and set `BETTER_AUTH_SECRET` and `DATABASE_URL`. The first start creates the platform admin `admin@medique.com` if that account does not exist yet.
+Copy `.env.example` to `.env.local` and set `BETTER_AUTH_SECRET` and `DATABASE_URL`. The first start creates the platform admin `admin@medique.id` if that account does not exist yet.
 
 Open [http://localhost:3000](http://localhost:3000). Unauthenticated visits go to the sign-in page.
 

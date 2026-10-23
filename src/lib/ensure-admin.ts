@@ -8,7 +8,7 @@ const MEDIQUE_ADMIN_ROLE = "medique admin";
 
 const mediqueAdmins = [
   {
-    email: "admin@medique.com",
+    email: "admin@medique.id",
     name: "Medique Admin",
     password: "M3d1qu31!",
   },
