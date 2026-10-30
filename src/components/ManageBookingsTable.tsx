@@ -49,6 +49,35 @@ const statusChipSx = {
   "& .MuiChip-label": { px: 0.75, fontSize: "0.7rem" },
 } as const;
 
+/** Stored `YYYY-MM-DDTHH:mm:ss` has no offset and is UTC. Show the browser's local time. */
+function formatLocalBookingTime(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "-";
+  }
+
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+  const hasZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized);
+  const date = dateOnly
+    ? new Date(`${trimmed}T00:00:00`)
+    : new Date(hasZone ? normalized : `${normalized}Z`);
+  if (Number.isNaN(date.getTime())) {
+    return trimmed;
+  }
+
+  const day = date.getDate();
+  const month = date.toLocaleString("en-GB", { month: "short" });
+  const year = date.getFullYear();
+  const time = date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  return `${day} ${month} ${year} ${time}`;
+}
+
 function BookingSlotCell({ bookingSlot, expired }: Pick<BookingTableRow, "bookingSlot" | "expired">) {
   return (
     <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: "center" }}>
@@ -417,7 +446,9 @@ export default function ManageBookingsTable({
 
                     return (
                       <TableRow key={row.id} hover>
-                        <TableCell>{row.bookedTime}</TableCell>
+                        <TableCell suppressHydrationWarning sx={{ whiteSpace: "nowrap" }}>
+                          {formatLocalBookingTime(row.bookedTime)}
+                        </TableCell>
                         <TableCell>
                           <StackedCell primary={row.name} secondary={row.contactPhoneNumber ?? "-"} />
                         </TableCell>

@@ -62,13 +62,6 @@ function parseIsoDate(value: string): Date {
   return new Date(year, month, day);
 }
 
-function parseBookingTime(value: string): Date {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return parseIsoDate(value);
-  }
-  return parseIsoDateTime(value);
-}
-
 function toIsoDateTime(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -264,7 +257,7 @@ function mapRowToListItem(row: BookingDbRow): BookingTableRow {
 
   return {
     id: String(row.id),
-    bookedTime: formatDateTime(parseBookingTime(row.bookingTime)),
+    bookedTime: row.bookingTime,
     name: row.fullName,
     contactPhoneNumber: row.contactPhoneNumber?.trim() || null,
     clinic: row.clinicName?.trim() || null,

@@ -10,6 +10,7 @@ export function isUnverifiedStatus(value: string): value is UnverifiedStatus {
 
 export type BookingTableRow = {
   id: string;
+  /** Stored booking timestamp. A value with no offset is UTC. */
   bookedTime: string;
   name: string;
   contactPhoneNumber: string | null;
