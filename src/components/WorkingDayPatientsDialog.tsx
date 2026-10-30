@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Table from "@mui/material/Table";
@@ -11,6 +14,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { cancelWorkingDayBookings } from "@/app/actions/cancel-working-day-bookings";
 import { fetchWorkingDayPatientSchedule } from "@/app/actions/fetch-working-day-patient-schedule";
 import type { WorkingDayPatientSchedule } from "@/lib/working-days-store";
 import { parseIsoDate } from "@/lib/working-day-schedule";
@@ -20,6 +24,7 @@ type WorkingDayPatientsDialogProps = {
   date: string | null;
   clinicId: number | null;
   onClose: () => void;
+  onBookingsChanged?: () => void;
 };
 
 function formatDialogTitle(isoDate: string): string {
@@ -36,19 +41,32 @@ export default function WorkingDayPatientsDialog({
   date,
   clinicId,
   onClose,
+  onBookingsChanged,
 }: WorkingDayPatientsDialogProps) {
   const [schedule, setSchedule] = useState<WorkingDayPatientSchedule | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isCancelling, startCancelTransition] = useTransition();
+
+  const hasVerifiedPatients = Boolean(
+    schedule &&
+      schedule.date === date &&
+      schedule.timeSlots.some((slot) => slot.patients.length > 0),
+  );
 
   useEffect(() => {
     if (!open || !date || clinicId === null) {
       return;
     }
 
+    setError(null);
+    setCancelError(null);
+    setConfirmOpen(false);
+    setSchedule(null);
+
     startTransition(async () => {
-      setError(null);
-      setSchedule(null);
       const result = await fetchWorkingDayPatientSchedule(date, clinicId);
       if (!result.ok) {
         setError(result.error);
@@ -58,10 +76,67 @@ export default function WorkingDayPatientsDialog({
     });
   }, [open, date, clinicId]);
 
+  function handleCancelWholeDay() {
+    if (!date || clinicId === null || isCancelling || !hasVerifiedPatients) {
+      return;
+    }
+    setConfirmOpen(true);
+  }
+
+  function handleConfirmCancel() {
+    if (!date || clinicId === null || isCancelling) {
+      return;
+    }
+
+    setConfirmOpen(false);
+    startCancelTransition(async () => {
+      setCancelError(null);
+      const result = await cancelWorkingDayBookings(date, clinicId);
+      if (!result.ok) {
+        setCancelError(result.error);
+        return;
+      }
+
+      const refreshed = await fetchWorkingDayPatientSchedule(date, clinicId);
+      if (!refreshed.ok) {
+        setCancelError(refreshed.error);
+        return;
+      }
+
+      setSchedule(refreshed.data);
+      onBookingsChanged?.();
+    });
+  }
+
   return (
+    <>
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{date ? formatDialogTitle(date) : "Patients"}</DialogTitle>
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 2,
+        }}
+      >
+        <Box component="span">{date ? formatDialogTitle(date) : "Patients"}</Box>
+        <Button
+          color="error"
+          variant="contained"
+          size="small"
+          disabled={!date || clinicId === null || isPending || isCancelling || !hasVerifiedPatients}
+          onClick={handleCancelWholeDay}
+          sx={{ flexShrink: 0 }}
+        >
+          Cancel Whole Day
+        </Button>
+      </DialogTitle>
       <DialogContent dividers sx={{ pt: 1 }}>
+        {cancelError ? (
+          <Typography variant="body2" color="error" sx={{ mb: 1 }}>
+            {cancelError}
+          </Typography>
+        ) : null}
         {clinicId === null ? (
           <Typography variant="body2" color="text.secondary">
             Select a clinic to view patients.
@@ -118,5 +193,15 @@ export default function WorkingDayPatientsDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+    <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+      <DialogTitle>Are You sure?</DialogTitle>
+      <DialogActions>
+        <Button onClick={() => setConfirmOpen(false)}>No</Button>
+        <Button color="error" variant="contained" onClick={handleConfirmCancel}>
+          Yes
+        </Button>
+      </DialogActions>
+    </Dialog>
+    </>
   );
 }

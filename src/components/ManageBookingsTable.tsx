@@ -3,10 +3,13 @@
 import { useCallback, useState, useTransition, type ChangeEvent, type ReactNode } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import MenuItem from "@mui/material/MenuItem";
 import Pagination from "@mui/material/Pagination";
 import Paper from "@mui/material/Paper";
+import Radio from "@mui/material/Radio";
+import RadioGroup from "@mui/material/RadioGroup";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -19,8 +22,15 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { fetchBookings } from "@/app/actions/list-bookings";
+import { setBookingUnverifiedStatus } from "@/app/actions/set-booking-unverified-status";
 import { toggleBookingVerification } from "@/app/actions/toggle-booking-verification";
-import type { BookingTableRow } from "@/lib/bookings-types";
+import {
+  DEFAULT_UNVERIFIED_STATUS,
+  UNVERIFIED_STATUS_OPTIONS,
+  isUnverifiedStatus,
+  type BookingTableRow,
+  type UnverifiedStatus,
+} from "@/lib/bookings-types";
 import type { Clinic } from "@/lib/clinics";
 import WorkingDaysCalendar from "@/components/WorkingDaysCalendar";
 
@@ -58,6 +68,24 @@ function VerifiedOnCell({ verifiedOn }: Pick<BookingTableRow, "verifiedOn">) {
   return <Chip label={verifiedOn} size="small" color="success" variant="outlined" sx={statusChipSx} />;
 }
 
+function StackedCell({ primary, secondary }: { primary: ReactNode; secondary: ReactNode }) {
+  return (
+    <Stack spacing={0.125}>
+      <Box component="span" sx={{ lineHeight: 1.35 }}>
+        {primary}
+      </Box>
+      <Typography
+        component="span"
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: "block", lineHeight: 1.3, whiteSpace: "nowrap" }}
+      >
+        {secondary}
+      </Typography>
+    </Stack>
+  );
+}
+
 function manageBookingsTabA11yProps(index: number) {
   return {
     id: `manage-bookings-tab-${index}`,
@@ -81,6 +109,119 @@ function ManageBookingsTabPanel({ children, index, value }: ManageBookingsTabPan
     >
       {value === index ? <Box sx={{ pt: 2 }}>{children}</Box> : null}
     </div>
+  );
+}
+
+const verificationOptionSx = {
+  m: 0,
+  gap: 0.5,
+  "& .MuiFormControlLabel-label": {
+    lineHeight: 1,
+  },
+  "&.Mui-disabled .MuiChip-root": {
+    opacity: 0.5,
+  },
+} as const;
+
+function verificationRadioSx(color: "error.main" | "success.main") {
+  return {
+    p: 0.25,
+    color,
+    "&.Mui-checked": { color },
+    "&.Mui-disabled": { color: "action.disabled" },
+  };
+}
+
+function displayedUnverifiedStatus(unverifiedStatus: string | null): UnverifiedStatus {
+  return unverifiedStatus && isUnverifiedStatus(unverifiedStatus)
+    ? unverifiedStatus
+    : DEFAULT_UNVERIFIED_STATUS;
+}
+
+function UnverifiedStatusSelect({
+  unverifiedStatus,
+  disabled,
+  onChange,
+}: {
+  unverifiedStatus: string | null;
+  disabled: boolean;
+  onChange: (unverifiedStatus: UnverifiedStatus) => void;
+}) {
+  return (
+    <TextField
+      select
+      hiddenLabel
+      size="small"
+      value={displayedUnverifiedStatus(unverifiedStatus)}
+      disabled={disabled}
+      onChange={(event) => {
+        const next = event.target.value;
+        if (isUnverifiedStatus(next)) {
+          onChange(next);
+        }
+      }}
+      slotProps={{
+        select: {
+          inputProps: { "aria-label": "Unverified status" },
+        },
+      }}
+      sx={{
+        width: 148,
+        "& .MuiInputBase-root": { fontSize: "0.75rem" },
+        "& .MuiSelect-select": { py: 0.25, pl: 1 },
+      }}
+    >
+      {UNVERIFIED_STATUS_OPTIONS.map((option) => (
+        <MenuItem key={option} value={option}>
+          {option}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+}
+
+function VerificationAction({
+  bookingId,
+  name,
+  verified,
+  disabled,
+  onChange,
+  unverifiedStatusControl,
+}: {
+  bookingId: string;
+  name: string;
+  verified: boolean;
+  disabled: boolean;
+  onChange: (bookingId: string, verified: boolean) => void;
+  unverifiedStatusControl?: ReactNode;
+}) {
+  return (
+    <RadioGroup
+      row
+      name={`booking-verification-${bookingId}`}
+      aria-label={`Verification for ${name}`}
+      value={verified ? "verified" : "unverified"}
+      onChange={(event) => onChange(bookingId, event.target.value === "verified")}
+      sx={{ flexWrap: "nowrap", columnGap: 1.5, alignItems: "center" }}
+    >
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+        <Radio
+          value="unverified"
+          size="small"
+          disabled={disabled}
+          slotProps={{ input: { "aria-label": "Unverified" } }}
+          sx={verificationRadioSx("error.main")}
+        />
+        {unverifiedStatusControl}
+      </Stack>
+      <FormControlLabel
+        value="verified"
+        disabled={disabled}
+        control={<Radio size="small" sx={verificationRadioSx("success.main")} />}
+        label={<Chip label="OK" size="small" color="success" variant="outlined" sx={statusChipSx} />}
+        sx={verificationOptionSx}
+      />
+    </RadioGroup>
   );
 }
 
@@ -172,6 +313,19 @@ export default function ManageBookingsTable({
     });
   }
 
+  function handleUnverifiedStatusChange(bookingId: string, unverifiedStatus: UnverifiedStatus) {
+    setPendingId(bookingId);
+    startTransition(async () => {
+      const result = await setBookingUnverifiedStatus(bookingId, unverifiedStatus);
+      setPendingId(null);
+      if (result.ok) {
+        setRows((current) => current.map((row) => (row.id === bookingId ? result.row : row)));
+      } else {
+        setFilterError(result.error);
+      }
+    });
+  }
+
   return (
     <Stack spacing={2}>
       <Typography variant="h4" component="h1">
@@ -237,25 +391,22 @@ export default function ManageBookingsTable({
             ) : null}
           </Paper>
 
-          <TableContainer component={Paper} elevation={1} sx={{ overflow: "hidden", opacity: busy ? 0.72 : 1 }}>
+          <TableContainer component={Paper} elevation={1} sx={{ overflowX: "auto", opacity: busy ? 0.72 : 1 }}>
             <Table size="small" aria-label="Bookings" sx={compactTableSx}>
               <TableHead>
                 <TableRow>
                   <TableCell>Booking time</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Clinic</TableCell>
-                  <TableCell>Practitioner</TableCell>
+                  <TableCell>Name/Phone</TableCell>
+                  <TableCell>Clinic/Practitioner</TableCell>
                   <TableCell>Booking Slot</TableCell>
-                  <TableCell>Verified on</TableCell>
-                  <TableCell>Verified by</TableCell>
-                  <TableCell align="right">Action</TableCell>
+                  <TableCell>Verified on/by</TableCell>
+                  <TableCell>Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} align="center" sx={{ py: 2, color: "text.secondary" }}>
+                    <TableCell colSpan={6} align="center" sx={{ py: 2, color: "text.secondary" }}>
                       No bookings match your filters.
                     </TableCell>
                   </TableRow>
@@ -267,29 +418,37 @@ export default function ManageBookingsTable({
                     return (
                       <TableRow key={row.id} hover>
                         <TableCell>{row.bookedTime}</TableCell>
-                        <TableCell>{row.name}</TableCell>
-                        <TableCell sx={{ whiteSpace: "nowrap" }}>{row.contactPhoneNumber ?? "-"}</TableCell>
-                        <TableCell>{row.clinic ?? "-"}</TableCell>
-                        <TableCell>{row.practitioner ?? "-"}</TableCell>
+                        <TableCell>
+                          <StackedCell primary={row.name} secondary={row.contactPhoneNumber ?? "-"} />
+                        </TableCell>
+                        <TableCell>
+                          <StackedCell primary={row.clinic ?? "-"} secondary={row.practitioner ?? "-"} />
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap" }}>
                           <BookingSlotCell bookingSlot={row.bookingSlot} expired={row.expired} />
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: "nowrap" }}>
-                          <VerifiedOnCell verifiedOn={row.verifiedOn} />
+                        <TableCell>
+                          <StackedCell
+                            primary={<VerifiedOnCell verifiedOn={row.verifiedOn} />}
+                            secondary={row.verifiedBy ?? "-"}
+                          />
                         </TableCell>
-                        <TableCell>{row.verifiedBy ?? "-"}</TableCell>
-                        <TableCell align="right" sx={{ py: 0.25, width: 48 }}>
-                          <Checkbox
-                            size="small"
-                            checked={verified}
+                        <TableCell sx={{ py: 0.25 }}>
+                          <VerificationAction
+                            bookingId={row.id}
+                            name={row.name}
+                            verified={verified}
                             disabled={busy || rowBusy || row.expired}
-                            onChange={(_, checked) => handleVerificationChange(row.id, checked)}
-                            sx={{ p: 0.25 }}
-                            slotProps={{
-                              input: {
-                                "aria-label": `Toggle verification for ${row.name}`,
-                              },
-                            }}
+                            onChange={handleVerificationChange}
+                            unverifiedStatusControl={
+                              <UnverifiedStatusSelect
+                                unverifiedStatus={row.unverifiedStatus}
+                                disabled={busy || rowBusy || verified}
+                                onChange={(unverifiedStatus) =>
+                                  handleUnverifiedStatusChange(row.id, unverifiedStatus)
+                                }
+                              />
+                            }
                           />
                         </TableCell>
                       </TableRow>

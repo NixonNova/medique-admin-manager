@@ -1,4 +1,4 @@
-import type { BookingTableRow } from "@/lib/bookings-types";
+import type { BookingTableRow, UnverifiedStatus } from "@/lib/bookings-types";
 import { type AppDatabase, getAppDatabase } from "@/lib/app-database";
 import {
   formatIsoDate,
@@ -27,6 +27,10 @@ async function addBookingColumns() {
     ALTER TABLE "Booking"
       ADD COLUMN IF NOT EXISTS "BookingSlot" text
   `);
+  await db.exec(`
+    ALTER TABLE "Booking"
+      ADD COLUMN IF NOT EXISTS "UnverifiedStatus" text
+  `);
 }
 
 type BookingDbRow = {
@@ -44,6 +48,7 @@ type BookingDbRow = {
   sessionSlot: number | null;
   verifiedByName: string | null;
   verifiedByEmail: string | null;
+  unverifiedStatus: string | null;
 };
 
 function parseIsoDate(value: string): Date {
@@ -271,6 +276,7 @@ function mapRowToListItem(row: BookingDbRow): BookingTableRow {
     verifiedBy: verifiedDisplay
       ? formatVerifiedByDisplay(row.verifiedByName, row.verifiedByEmail)
       : null,
+    unverifiedStatus: row.unverifiedStatus?.trim() || null,
   };
 }
 
@@ -281,6 +287,24 @@ const bookingFromJoin = `
   LEFT JOIN "clinic" c ON c."ID" = h."ClinicID"
   LEFT JOIN "user" practitioner ON practitioner.id = d."UserID"
   LEFT JOIN "user" verifier ON verifier.id = b."VerifiedBy"
+  -- Unverified bookings have no session; still show the clinic and doctor scheduled for that slot.
+  LEFT JOIN LATERAL (
+    SELECT
+      string_agg(DISTINCT clinic."ClinicName", ', ' ORDER BY clinic."ClinicName") AS "clinicName",
+      string_agg(
+        DISTINCT COALESCE(NULLIF(btrim(doctor.name), ''), NULLIF(btrim(doctor.email), '')),
+        ', '
+        ORDER BY COALESCE(NULLIF(btrim(doctor.name), ''), NULLIF(btrim(doctor.email), ''))
+      ) AS "practitionerName"
+    FROM "WorkingDayDetail" slot
+    INNER JOIN "WorkingDayHeader" header ON header."ID" = slot."Header"
+    LEFT JOIN "clinic" clinic ON clinic."ID" = header."ClinicID"
+    LEFT JOIN "user" doctor ON doctor.id = slot."UserID"
+    WHERE b."SessionID" IS NULL
+      AND header."Date" = split_part(btrim(b."BookingSlot"), ' ', 1)
+      AND slot."Start" = split_part(split_part(btrim(b."BookingSlot"), ' ', 2), '-', 1)
+      AND slot."End" = split_part(split_part(btrim(b."BookingSlot"), ' ', 2), '-', 2)
+  ) matched ON true
 `;
 
 const bookingSelect = `
@@ -289,8 +313,8 @@ const bookingSelect = `
     b."BookingTime" AS "bookingTime",
     b."FullName" AS "fullName",
     b."ContactPhoneNumber" AS "contactPhoneNumber",
-    c."ClinicName" AS "clinicName",
-    practitioner.name AS "practitionerName",
+    COALESCE(c."ClinicName", matched."clinicName") AS "clinicName",
+    COALESCE(practitioner.name, matched."practitionerName") AS "practitionerName",
     practitioner.email AS "practitionerEmail",
     b."BookingSlot" AS "bookingSlot",
     b."VerifiedOn" AS "verifiedOn",
@@ -298,7 +322,8 @@ const bookingSelect = `
     d."Start" AS "sessionStart",
     d."Slot" AS "sessionSlot",
     verifier.name AS "verifiedByName",
-    verifier.email AS "verifiedByEmail"
+    verifier.email AS "verifiedByEmail",
+    b."UnverifiedStatus" AS "unverifiedStatus"
   ${bookingFromJoin}
 `;
 
@@ -442,4 +467,62 @@ export async function setBookingVerified(
   });
 
   return result;
+}
+
+const CANCELLED_WORKING_DAY_STATUS: UnverifiedStatus = "Tidak ada praktek";
+
+/** Unverify every verified booking linked to this clinic day and mark why. */
+export async function cancelVerifiedBookingsForWorkingDay(
+  date: string,
+  clinicId: number,
+): Promise<number> {
+  await ensureBookingColumns();
+  const db = await getAppDatabase();
+
+  return db.transaction(async (tx) => {
+    const rows = await tx.all<{ id: number }>(
+      `
+        SELECT b."ID" AS id
+        FROM "WorkingDayHeader" h
+        INNER JOIN "WorkingDayDetail" d ON d."Header" = h."ID"
+        INNER JOIN "Booking" b ON b."ID" = d."BookingID"
+        WHERE h."Date" = ?
+          AND h."ClinicID" = ?
+          AND b."VerifiedOn" IS NOT NULL
+        ORDER BY b."ID" ASC
+      `,
+      [date, clinicId],
+    );
+
+    for (const row of rows) {
+      await releaseBookingSession(tx, row.id);
+      await tx.run(`UPDATE "WorkingDayDetail" SET "BookingID" = NULL WHERE "BookingID" = ?`, [
+        row.id,
+      ]);
+      await tx.run(
+        `UPDATE "Booking" SET "VerifiedOn" = NULL, "VerifiedBy" = NULL, "SessionID" = NULL, "UnverifiedStatus" = ? WHERE "ID" = ?`,
+        [CANCELLED_WORKING_DAY_STATUS, row.id],
+      );
+    }
+
+    return rows.length;
+  });
+}
+
+export async function setBookingUnverifiedStatus(
+  id: number,
+  unverifiedStatus: UnverifiedStatus,
+): Promise<BookingTableRow | null> {
+  await ensureBookingColumns();
+  const db = await getAppDatabase();
+
+  const updated = await db.run(
+    `UPDATE "Booking" SET "UnverifiedStatus" = ? WHERE "ID" = ?`,
+    [unverifiedStatus, id],
+  );
+  if ((updated.changes ?? 0) === 0) {
+    return null;
+  }
+
+  return getBookingById(db, id);
 }

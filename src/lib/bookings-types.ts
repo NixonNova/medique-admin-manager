@@ -1,3 +1,13 @@
+export const UNVERIFIED_STATUS_OPTIONS = ["Pending", "Slot Penuh", "Tidak ada praktek", "Gagal"] as const;
+
+export type UnverifiedStatus = (typeof UNVERIFIED_STATUS_OPTIONS)[number];
+
+export const DEFAULT_UNVERIFIED_STATUS: UnverifiedStatus = "Pending";
+
+export function isUnverifiedStatus(value: string): value is UnverifiedStatus {
+  return (UNVERIFIED_STATUS_OPTIONS as readonly string[]).includes(value);
+}
+
 export type BookingTableRow = {
   id: string;
   bookedTime: string;
@@ -11,4 +21,6 @@ export type BookingTableRow = {
   verifiedOn: string | null;
   session: string | null;
   verifiedBy: string | null;
+  /** Status while the booking is unverified. Null displays as Pending. */
+  unverifiedStatus: string | null;
 };

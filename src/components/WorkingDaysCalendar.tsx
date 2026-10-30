@@ -114,7 +114,7 @@ export default function WorkingDaysCalendar({
     setPatientsOpen(true);
   }, []);
 
-  const loadSummaries = useCallback((visibleDate: Date, selectedClinic: string) => {
+  const loadSummaries = useCallback((visibleDate: Date, selectedClinic: string, force = false) => {
     if (!selectedClinic) {
       loadedKeyRef.current = null;
       setSummaries([]);
@@ -124,7 +124,7 @@ export default function WorkingDaysCalendar({
 
     const bounds = monthIsoBounds(visibleDate);
     const nextKey = `${selectedClinic}:${bounds.monthKey}`;
-    if (loadedKeyRef.current === nextKey) {
+    if (!force && loadedKeyRef.current === nextKey) {
       return;
     }
     loadedKeyRef.current = nextKey;
@@ -243,6 +243,7 @@ export default function WorkingDaysCalendar({
         date={selectedDate}
         clinicId={selectedClinicId}
         onClose={() => setPatientsOpen(false)}
+        onBookingsChanged={() => loadSummaries(visibleMonth, clinicId, true)}
       />
     </>
   );
