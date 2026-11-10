@@ -26,7 +26,9 @@ import {
   checkWorkingDayTimeSlots,
   generateWorkingDays,
 } from "@/app/actions/generate-working-days";
+import AppDateField from "@/components/AppDateField";
 import type { Clinic } from "@/lib/clinics";
+import { firstClinicId, useDefaultClinicId } from "@/lib/use-default-clinic";
 import {
   computeDailyTimetable,
   earliestGenerationDate,
@@ -163,7 +165,7 @@ export default function WorkingDaysGenerationForm({
   clinics,
 }: WorkingDaysGenerationFormProps) {
   const [values, setValues] = useState(createDefaultValues);
-  const [clinicId, setClinicId] = useState("");
+  const [clinicId, setClinicId] = useDefaultClinicId(clinics);
   const [error, setError] = useState<string | null>(null);
   const [checkNotice, setCheckNotice] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
@@ -173,7 +175,7 @@ export default function WorkingDaysGenerationForm({
 
   useEffect(() => {
     setValues(createDefaultValues());
-    setClinicId("");
+    setClinicId(firstClinicId(clinics));
     setError(null);
     setCheckNotice(null);
     setSuccessOpen(false);
@@ -487,19 +489,15 @@ export default function WorkingDaysGenerationForm({
           </AccordionSummary>
           <AccordionDetails>
             <Stack spacing={2.5}>
-              <TextField
+              <AppDateField
                 label="Start of generation"
                 name="generationStartDate"
-                type="date"
                 value={values.generationStartDate}
-                onChange={(event) => patch("generationStartDate", event.target.value)}
+                onChange={(next) => patch("generationStartDate", next)}
                 required
                 fullWidth
                 disabled={pending}
-                slotProps={{
-                  inputLabel: { shrink: true },
-                  htmlInput: { min: earliestStartDate },
-                }}
+                min={earliestStartDate}
                 helperText="Working days are generated from this date forward. Today and earlier dates are not available."
               />
 

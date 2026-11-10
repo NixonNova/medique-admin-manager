@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Box from "@mui/material/Box";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -13,6 +13,7 @@ import { fetchWorkingDaySummaries } from "@/app/actions/list-working-day-summari
 import WorkingDayPatientsDialog from "@/components/WorkingDayPatientsDialog";
 import type { Clinic } from "@/lib/clinics";
 import type { WorkingDaySlotSummary } from "@/lib/working-days-store";
+import { useDefaultClinicId } from "@/lib/use-default-clinic";
 import { formatIsoDate, parseIsoDate } from "@/lib/working-day-schedule";
 
 type WorkingDaysCalendarProps = {
@@ -98,7 +99,7 @@ export default function WorkingDaysCalendar({
 }: WorkingDaysCalendarProps) {
   const calendarRef = useRef<HTMLDivElement>(null);
   const loadedKeyRef = useRef<string | null>(null);
-  const [clinicId, setClinicId] = useState("");
+  const [clinicId, setClinicId] = useDefaultClinicId(clinics);
   const [summaries, setSummaries] = useState<WorkingDaySlotSummary[]>([]);
   const [visibleMonth, setVisibleMonth] = useState(() => parseIsoDate(initialVisibleDate));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -159,6 +160,10 @@ export default function WorkingDaysCalendar({
     [openPatientsForDate, visibleMonth],
   );
 
+  useEffect(() => {
+    loadSummaries(visibleMonth, clinicId);
+  }, [clinicId, loadSummaries, visibleMonth]);
+
   const handleEventEditingStart = useCallback(
     (occurrence: SchedulerRenderableEventOccurrence, eventDetails: { cancel: () => void }) => {
       const date = parseWorkingDayEventId(occurrence.id);
@@ -180,9 +185,7 @@ export default function WorkingDaysCalendar({
             size="small"
             value={clinicId}
             onChange={(event) => {
-              const nextClinicId = event.target.value;
-              setClinicId(nextClinicId);
-              loadSummaries(visibleMonth, nextClinicId);
+              setClinicId(event.target.value);
             }}
             disabled={clinics.length === 0}
             helperText={
@@ -190,14 +193,17 @@ export default function WorkingDaysCalendar({
             }
             sx={{ minWidth: 260, mb: 1.5 }}
           >
-            <MenuItem value="">
-              <em>Select a clinic</em>
-            </MenuItem>
-            {clinics.map((clinic) => (
-              <MenuItem key={clinic.id} value={String(clinic.id)}>
-                {clinic.name}
+            {clinics.length === 0 ? (
+              <MenuItem value="" disabled>
+                No clinics
               </MenuItem>
-            ))}
+            ) : (
+              clinics.map((clinic) => (
+                <MenuItem key={clinic.id} value={String(clinic.id)}>
+                  {clinic.name}
+                </MenuItem>
+              ))
+            )}
           </TextField>
           <Typography variant="body2" color="text.secondary">
             {clinicId
@@ -220,7 +226,6 @@ export default function WorkingDaysCalendar({
               const date =
                 visibleDate instanceof Date ? visibleDate : new Date(visibleDate as string | number);
               setVisibleMonth(date);
-              loadSummaries(date, clinicId);
             }}
             onEventEditingStart={handleEventEditingStart}
             readOnly

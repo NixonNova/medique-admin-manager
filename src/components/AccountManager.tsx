@@ -4,6 +4,7 @@ import {
   createContext,
   forwardRef,
   useContext,
+  useEffect,
   useMemo,
   useState,
   useTransition,
@@ -61,7 +62,10 @@ import {
   collectTreeItemIds,
   USER_TREE_ROOT_ID,
 } from "@/lib/user-tree";
+import AppDateField from "@/components/AppDateField";
+import DeleteWorkingDaysDialog from "@/components/DeleteWorkingDaysDialog";
 import WorkingDaysGenerationForm from "@/components/WorkingDaysGenerationForm";
+import { firstClinicId, useDefaultClinicId } from "@/lib/use-default-clinic";
 import type { UserTypeOption } from "@/lib/user-types";
 
 type AccountManagerProps = {
@@ -209,13 +213,27 @@ export default function AccountManager({
   const [clinicPending, startClinicTransition] = useTransition();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userInfoTab, setUserInfoTab] = useState(0);
+  const [deleteClinicId, setDeleteClinicId] = useDefaultClinicId(clinics);
+  const [deleteStartDate, setDeleteStartDate] = useState("");
+  const [deleteEndDate, setDeleteEndDate] = useState("");
+  const [deleteFormError, setDeleteFormError] = useState<string | null>(null);
+  const [deleteWorkingDaysOpen, setDeleteWorkingDaysOpen] = useState(false);
   const selectedUser = selectedUserId ? usersById.get(selectedUserId) : null;
   const selectedUserRole = primaryRole(selectedUser?.role);
   const showUsersTab = selectedUserRole === "admin";
   const showClinicsTab = selectedUserRole === "admin";
-  const showWorkingDaysTab = selectedUserRole === "user";
+  const showWorkingDaysTab = selectedUserRole === "admin" || selectedUserRole === "user";
   const clinicsTabIndex = showUsersTab ? 1 : 0;
   const workingDaysTabIndex = (showUsersTab ? 1 : 0) + (showClinicsTab ? 1 : 0);
+  const deleteWorkingDaysTabIndex = workingDaysTabIndex + 1;
+
+  useEffect(() => {
+    setDeleteClinicId(firstClinicId(clinics));
+    setDeleteStartDate("");
+    setDeleteEndDate("");
+    setDeleteFormError(null);
+    setDeleteWorkingDaysOpen(false);
+  }, [selectedUserId]);
   const usersUnderAdmin = useMemo(() => {
     if (!selectedUser || !showUsersTab) {
       return [];
@@ -510,6 +528,12 @@ export default function AccountManager({
                     {...userInfoTabA11yProps(workingDaysTabIndex)}
                   />
                 ) : null}
+                {showWorkingDaysTab ? (
+                  <Tab
+                    label="Delete Working Days"
+                    {...userInfoTabA11yProps(deleteWorkingDaysTabIndex)}
+                  />
+                ) : null}
               </Tabs>
             </Box>
             {showUsersTab ? (
@@ -622,6 +646,96 @@ export default function AccountManager({
                 />
               </UserInfoTabPanel>
             ) : null}
+            {showWorkingDaysTab ? (
+              <UserInfoTabPanel value={userInfoTab} index={deleteWorkingDaysTabIndex}>
+                <Stack spacing={2} sx={{ maxWidth: 420 }}>
+                  {deleteFormError ? <Alert severity="error">{deleteFormError}</Alert> : null}
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      Select clinic
+                    </Typography>
+                    <TextField
+                      select
+                      label="Clinic"
+                      name="deleteClinicId"
+                      value={deleteClinicId}
+                      onChange={(event) => {
+                        setDeleteClinicId(event.target.value);
+                        setDeleteFormError(null);
+                      }}
+                      required
+                      fullWidth
+                      disabled={clinics.length === 0}
+                      helperText={
+                        clinics.length === 0
+                          ? "Add a clinic before deleting working days."
+                          : undefined
+                      }
+                    >
+                      {clinics.length === 0 ? (
+                        <MenuItem value="" disabled>
+                          No clinics
+                        </MenuItem>
+                      ) : (
+                        clinics.map((clinic) => (
+                          <MenuItem key={clinic.id} value={String(clinic.id)}>
+                            {clinic.name}
+                          </MenuItem>
+                        ))
+                      )}
+                    </TextField>
+                  </Stack>
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      Please add date range to delete working days
+                    </Typography>
+                    <AppDateField
+                      label="Start date"
+                      value={deleteStartDate}
+                      onChange={(next) => {
+                        setDeleteStartDate(next);
+                        setDeleteFormError(null);
+                      }}
+                      fullWidth
+                    />
+                    <AppDateField
+                      label="End date"
+                      value={deleteEndDate}
+                      onChange={(next) => {
+                        setDeleteEndDate(next);
+                        setDeleteFormError(null);
+                      }}
+                      fullWidth
+                      min={deleteStartDate || undefined}
+                    />
+                  </Stack>
+                  <Button
+                    color="error"
+                    variant="contained"
+                    onClick={() => {
+                      const clinicId = Number(deleteClinicId);
+                      if (!Number.isInteger(clinicId) || clinicId < 1) {
+                        setDeleteFormError("Select a clinic.");
+                        return;
+                      }
+                      if (!deleteStartDate || !deleteEndDate) {
+                        setDeleteFormError("Please add date range to delete working days");
+                        return;
+                      }
+                      if (deleteStartDate > deleteEndDate) {
+                        setDeleteFormError("Start date must be on or before the end date.");
+                        return;
+                      }
+                      setDeleteFormError(null);
+                      setDeleteWorkingDaysOpen(true);
+                    }}
+                    sx={{ alignSelf: "flex-start" }}
+                  >
+                    Proceed
+                  </Button>
+                </Stack>
+              </UserInfoTabPanel>
+            ) : null}
           </Paper>
         ) : (
           <div className="hidden min-w-0 lg:block" aria-hidden />
@@ -729,6 +843,17 @@ export default function AccountManager({
           </DialogActions>
         </form>
       </Dialog>
+      <DeleteWorkingDaysDialog
+        open={deleteWorkingDaysOpen}
+        clinicId={deleteClinicId ? Number(deleteClinicId) : null}
+        startDate={deleteStartDate}
+        endDate={deleteEndDate}
+        onClose={() => setDeleteWorkingDaysOpen(false)}
+        onDeleted={() => {
+          setDeleteWorkingDaysOpen(false);
+          router.refresh();
+        }}
+      />
       <Dialog open={clinicOpen} onClose={closeClinicDialog} fullWidth maxWidth="sm">
         <form onSubmit={onClinicSubmit}>
           <DialogTitle>{clinicDialogMode === "edit" ? "Edit clinic" : "New clinic"}</DialogTitle>

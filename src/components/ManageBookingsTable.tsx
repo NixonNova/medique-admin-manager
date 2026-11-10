@@ -31,6 +31,7 @@ import {
   type BookingTableRow,
   type UnverifiedStatus,
 } from "@/lib/bookings-types";
+import AppDateField from "@/components/AppDateField";
 import type { Clinic } from "@/lib/clinics";
 import WorkingDaysCalendar from "@/components/WorkingDaysCalendar";
 
@@ -381,23 +382,19 @@ export default function ManageBookingsTable({
               useFlexGap
               sx={{ width: "100%", flexWrap: "wrap", alignItems: { xs: "stretch", sm: "flex-end" } }}
             >
-              <TextField
+              <AppDateField
                 label="Booking from"
-                type="date"
                 size="small"
                 value={bookingStart}
-                onChange={(event) => setBookingStart(event.target.value)}
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ width: { xs: "100%", sm: 160 } }}
+                onChange={setBookingStart}
+                sx={{ width: { xs: "100%", sm: 200 } }}
               />
-              <TextField
+              <AppDateField
                 label="Booking to"
-                type="date"
                 size="small"
                 value={bookingEnd}
-                onChange={(event) => setBookingEnd(event.target.value)}
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ width: { xs: "100%", sm: 160 } }}
+                onChange={setBookingEnd}
+                sx={{ width: { xs: "100%", sm: 200 } }}
               />
               <Button size="small" variant="contained" disabled={busy} onClick={handleApplyFilter}>
                 Apply

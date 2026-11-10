@@ -3,6 +3,7 @@ import { Roboto } from "next/font/google";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
+import AppDateProvider from "@/components/AppDateProvider";
 import theme from "@/theme";
 import "./globals.css";
 
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <AppRouterCacheProvider options={{ enableCssLayer: true }}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
-            {children}
+            <AppDateProvider>{children}</AppDateProvider>
           </ThemeProvider>
         </AppRouterCacheProvider>
       </body>

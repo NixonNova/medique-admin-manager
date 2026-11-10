@@ -355,3 +355,65 @@ export async function saveGeneratedWorkingDays(
     };
   });
 }
+
+/** Days with any detail row whose BookingID is set are left untouched. */
+const DELETABLE_HEADER_FILTER = `
+  h."ClinicID" = ?
+  AND h."Date" >= ?
+  AND h."Date" <= ?
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "WorkingDayDetail" booked
+    WHERE booked."Header" = h."ID"
+      AND booked."BookingID" IS NOT NULL
+  )
+`;
+
+/** Remove clinic working days in the range, skipping any day that has a verified booking. */
+export async function deleteWorkingDaysForClinic(
+  dateStart: string,
+  dateEnd: string,
+  clinicId: number,
+): Promise<number> {
+  await ensureWorkingDayReferences();
+  const db = await getAppDatabase();
+  const params = [clinicId, dateStart, dateEnd];
+
+  return db.transaction(async (tx) => {
+    await tx.run(
+      `
+        UPDATE "Booking"
+        SET "SessionID" = NULL
+        WHERE "SessionID" IN (
+          SELECT d."ID"
+          FROM "WorkingDayDetail" d
+          INNER JOIN "WorkingDayHeader" h ON h."ID" = d."Header"
+          WHERE ${DELETABLE_HEADER_FILTER}
+        )
+      `,
+      params,
+    );
+
+    await tx.run(
+      `
+        DELETE FROM "WorkingDayDetail"
+        WHERE "Header" IN (
+          SELECT h."ID"
+          FROM "WorkingDayHeader" h
+          WHERE ${DELETABLE_HEADER_FILTER}
+        )
+      `,
+      params,
+    );
+
+    const deleted = await tx.run(
+      `
+        DELETE FROM "WorkingDayHeader" AS h
+        WHERE ${DELETABLE_HEADER_FILTER}
+      `,
+      params,
+    );
+
+    return deleted.changes;
+  });
+}
