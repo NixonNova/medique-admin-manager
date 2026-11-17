@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Roboto } from "next/font/google";
+import localFont from "next/font/local";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -7,9 +7,9 @@ import AppDateProvider from "@/components/AppDateProvider";
 import theme from "@/theme";
 import "./globals.css";
 
-const roboto = Roboto({
-  weight: ["300", "400", "500", "700"],
-  subsets: ["latin"],
+const roboto = localFont({
+  src: "../fonts/roboto-latin.woff2",
+  weight: "300 700",
   display: "swap",
   variable: "--font-roboto",
 });
